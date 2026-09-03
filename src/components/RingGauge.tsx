@@ -34,6 +34,11 @@ export interface RingGaugeProps {
   digits?: number
   /** §4-3 임계값. 지표마다 다르므로 호출부가 정한다. */
   level?: GaugeLevel
+  /**
+   * 가운데 숫자를 다른 글자로 덮어쓴다. 초음파처럼 "-1 = 앞이 비었음"인 센서를
+   * 그냥 숫자로 찍으면 화면에 -1이 뜨기 때문에 필요하다.
+   */
+  display?: string
 }
 
 export function RingGauge({
@@ -43,6 +48,7 @@ export function RingGauge({
   max = 100,
   digits = 0,
   level = 'ok',
+  display,
 }: RingGaugeProps) {
   const ratio = Math.max(0, Math.min(1, value / max))
 
@@ -73,8 +79,15 @@ export function RingGauge({
         </svg>
 
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className={cn('num text-[22px] font-semibold tracking-[-0.03em]', TEXT[level])}>
-            {value.toFixed(digits)}
+          <span
+            className={cn(
+              'num font-semibold tracking-[-0.03em]',
+              // 덮어쓴 글자는 "열림"처럼 한글이 올 수 있어서 한 단계 작게 잡는다
+              display ? 'text-[15px]' : 'text-[22px]',
+              TEXT[level],
+            )}
+          >
+            {display ?? value.toFixed(digits)}
           </span>
         </div>
       </div>

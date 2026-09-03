@@ -7,14 +7,22 @@
  */
 import { manualDrive, type Dir } from '@/sim/mockEngine'
 import { robotStore, type Face, type LedMode } from '@/store/robotStore'
+import { pushCloudMove } from './cloudControl'
 import { setLcdText, twoLines } from './lcd'
 import { send } from './ws'
 
 const get = () => robotStore.getState()
 
+/**
+ * 같은 명령을 두 경로로 동시에 내보낸다.
+ *   WebSocket   같은 와이파이일 때 0.1초. 배포(https) 환경에서는 브라우저가 막는다.
+ *   Supabase    ESP32가 0.3초마다 가지러 온다. 인터넷만 있으면 어디서든 된다.
+ * 둘 다 실패해도 목업(manualDrive)은 돌아서 화면은 멈추지 않는다.
+ */
 export function sendMove(dir: Dir, spd: number) {
   get().manualInput()
   send({ cmd: 'MOVE', dir, spd })
+  pushCloudMove(dir, spd)
   manualDrive(dir, spd)
 }
 

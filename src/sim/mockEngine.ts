@@ -105,10 +105,23 @@ function drift() {
   // 스테이션은 충전 덱을 겸한다. 도킹해 있는 동안은 급수 중에도 계속 충전된다.
   const onDock = watering || s.behavior === 'docking'
 
+  const lux = luxAt(s.pos)
+
+  /*
+   * 좌우 조도계는 실기기에 두 대가 달려 있다. 목업에서도 두 값을 따로 만들어야
+   * 홈 화면의 조도(좌)/조도(우) 게이지가 ESP32 없이도 그럴듯하게 움직인다.
+   * 로봇이 향한 방향에 따라 한쪽이 조금 더 밝게 — 그게 광원 탐색의 근거다.
+   */
+  const tilt = Math.sin((s.pos.heading * Math.PI) / 180) * 0.12
+
   s.applySensor({
     moisture: clamp(sn.moisture + (watering ? WATER_RATE : -MOISTURE_DRIFT) * k, 0, 95),
     nutrient: clamp(sn.nutrient - 0.01 * k, 0, 100),
-    lux: luxAt(s.pos),
+    lux,
+    luxL: Math.max(0, Math.round(lux * (1 + tilt) + noise(8))),
+    luxR: Math.max(0, Math.round(lux * (1 - tilt) + noise(8))),
+    // 목업에는 진짜 장애물이 없다. 실기기가 붙으면 초음파 실측이 덮어쓴다.
+    distance: -1,
     temp: 23.5 + Math.sin(ticks / 300) * 1.2 + noise(0.15),
     humidity: 48 + noise(2),
     battery: clamp(sn.battery + (onDock ? 0.5 : -0.02) * k, 0, 100),
@@ -346,6 +359,10 @@ export function tick() {
   const now = Date.now()
 
   if (s.ownerNear && s.ownerNearUntil > 0 && now > s.ownerNearUntil) s.setOwnerNear(false)
+
+  // 다 띄운 긴급 알림은 스스로 사라져야 한다. 섬을 내리는 쪽이 setTimeout을 안
+  // 걸어도 되게 여기서 한 곳에서만 만료를 본다.
+  s.sweepAlert()
 
   if (s.mode === 'manual' && now > s.manualHoldUntil) {
     s.setMode('auto')

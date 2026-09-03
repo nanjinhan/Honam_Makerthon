@@ -1,36 +1,18 @@
-// Forward declarations for Arduino .ino prototype generation
-enum EyeType : int;
-enum MouthType : int;
+/*
+ * 얼굴 애니메이션 — 팀원 작성 코드 (face_tft.ino) 그대로.
+ *
+ * 이 파일은 손대지 않는다. 새 표정을 추가하고 싶으면 여기 anim*() 함수를 하나 더
+ * 만들고, smartfarm_robot.ino의 playFace()에 한 줄 연결하면 된다.
+ *
+ * delay()가 잔뜩 들어있는데 그대로 둬도 된다 — 이 코드는 Core 1의 loop()에서만
+ * 돌고, 네트워크·모터는 Core 0의 별도 태스크에서 돌기 때문에 서로 안 막는다.
+ *
+ * 이 파일이 기대하는 것 (smartfarm_robot.ino가 먼저 정의해준다):
+ *   - tft 객체, TFT_* 핀, PANEL_COLOR_COMPLEMENT
+ *   - Adafruit_GFX / SPI / math.h
+ */
+#pragma once
 
-// ---------------- 얼굴(TFT) ----------------
-#include <Adafruit_GFX.h>
-#include <Adafruit_ST7789.h>
-#include <SPI.h>
-#include <math.h>
-
-// ---------------- 네트워크 + 1602 LCD ----------------
-#include <WiFi.h>
-#include <HTTPClient.h>
-#include <WiFiClientSecure.h>
-#include <ArduinoJson.h>
-#include <Wire.h>
-#include <LiquidCrystal_I2C.h>
-#include "secrets.h"
-
-// ============================================================
-// PART 1. TFT 얼굴 (기존 코드 그대로)
-// ============================================================
-
-// ---------------- TFT PINS ----------------
-#define TFT_CS    5
-#define TFT_DC 2    
-#define TFT_RST   4
-#define TFT_SCLK  18
-#define TFT_MOSI  23
-
-Adafruit_ST7789 tft(TFT_CS, TFT_DC, TFT_RST);
-
-constexpr bool PANEL_COLOR_COMPLEMENT = true;
 
 // ---------------- SCREEN ----------------
 constexpr int SCREEN_W = 320;
@@ -995,6 +977,8 @@ void animNeedWater() {
 
     delay(65);
   }
+
+  hideBubble();   // 애니메이션 끝나면 말풍선도 같이 지운다 — 안 그러면 idle로 돌아가도 화면에 계속 남는다
 }
 
 void animDrinking() {
@@ -1166,166 +1150,3 @@ void runDemo() {
   idleWithBlink(1400);
 }
 
-// ============================================================
-// PART 2. 1602 LCD + WiFi + Supabase (기존 코드 그대로)
-// ============================================================
-
-LiquidCrystal_I2C* lcd = nullptr;
-
-uint8_t findLcdAddress() {
-  Serial.println("[2] I2C 주소 스캔 시작...");
-  uint8_t found = 0;
-
-  for (uint8_t addr = 1; addr < 127; addr++) {
-    Wire.beginTransmission(addr);
-    if (Wire.endTransmission() == 0) {
-      Serial.printf("    → 장치 발견: 0x%02X\n", addr);
-      if (found == 0) found = addr;
-    }
-  }
-
-  if (found == 0) {
-    Serial.println("[2] 장치를 하나도 못 찾음 — 배선 확인 필요 (SDA=21, SCL=22, VCC=5V, GND)");
-    Serial.println("    일단 0x27로 시도합니다.");
-    return 0x27;
-  }
-  Serial.printf("[2] 사용할 주소: 0x%02X\n", found);
-  return found;
-}
-
-const unsigned long POLL_MS = 3000;
-String lastUpdatedAt = "";
-
-void connectWifi() {
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-  Serial.printf("[4] 와이파이 연결 중 (%s)", WIFI_SSID);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(400);
-    Serial.print(".");
-  }
-  Serial.println();
-  Serial.print("[4] 연결됨. IP: ");
-  Serial.println(WiFi.localIP());
-}
-
-void showOnLcd(const String& text) {
-  lcd->clear();
-  lcd->setCursor(0, 0);
-  lcd->print(text.substring(0, 16));
-  if (text.length() > 16) {
-    lcd->setCursor(0, 1);
-    lcd->print(text.substring(16, 32));
-  }
-}
-
-void pollOnce() {
-  if (WiFi.status() != WL_CONNECTED) {
-    connectWifi();
-    return;
-  }
-
-  WiFiClientSecure client;
-  client.setInsecure();
-
-  HTTPClient http;
-  String url = String(SUPABASE_URL) + "/rest/v1/lcd_state?select=text,updated_at&id=eq.1";
-  http.begin(client, url);
-  http.addHeader("apikey", SUPABASE_ANON_KEY);
-  http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
-
-  int code = http.GET();
-
-  if (code == 200) {
-    String body = http.getString();
-
-    JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, body);
-    if (!err && doc.is<JsonArray>() && doc.size() > 0) {
-      JsonObject row = doc[0];
-      const char* text = row["text"] | "";
-      const char* updatedAt = row["updated_at"] | "";
-
-      if (lastUpdatedAt != updatedAt) {
-        lastUpdatedAt = updatedAt;
-        Serial.printf("새 문구: %s\n", text);
-        showOnLcd(String(text));
-      }
-    } else {
-      Serial.println("JSON 파싱 실패 — 응답 형식이 이상함");
-    }
-  } else {
-    Serial.printf("Supabase 호출 실패, HTTP %d\n", code);
-    if (code < 0) Serial.println(http.errorToString(code));
-  }
-
-  http.end();
-}
-
-// ============================================================
-// PART 3. 네트워크 태스크 (Core 0에서 도는 "두 번째 loop")
-// ============================================================
-
-void networkTask(void*) {
-  for (;;) {
-    pollOnce();
-    vTaskDelay(pdMS_TO_TICKS(POLL_MS));
-  }
-}
-
-// ============================================================
-// PART 4. SETUP / LOOP
-// ============================================================
-
-void setup() {
-  Serial.begin(115200);
-  delay(1500);
-  Serial.println();
-  Serial.println("========== 통합 스케치 시작 ==========");
-  Serial.println("[1] 시리얼 정상");
-
-  // --- TFT 얼굴 먼저 (부팅하자마자 얼굴이 뜨게) ---
-  SPI.begin(TFT_SCLK, -1, TFT_MOSI, TFT_CS);
-  tft.init(240, 320);
-  tft.setRotation(1);
-
-  C_BLACK     = panel565(0,   0,   0);
-  C_WHITE     = panel565(255, 255, 255);
-  C_PINK      = panel565(255, 88,  145);
-  C_PINK_DARK = panel565(215, 45,  105);
-  C_CYAN      = panel565(70,  220, 255);
-  C_CYAN_SOFT = panel565(140, 235, 255);
-  C_YELLOW    = panel565(255, 220, 60);
-
-  tft.fillScreen(C_BLACK);
-  randomSeed(micros());
-  hideBubble();
-  showIdle(0);
-
-  // --- 1602 LCD (I2C) ---
-  Wire.begin(21, 22);
-  Wire.setTimeOut(50);
-  delay(50);
-
-  lcd = new LiquidCrystal_I2C(findLcdAddress(), 16, 2);
-  lcd->init();
-  lcd->backlight();
-  lcd->setCursor(0, 0);
-  lcd->print("Connecting...");
-  Serial.println("[3] LCD 초기화 명령 전송함");
-
-  // --- WiFi ---
-  connectWifi();
-
-  lcd->clear();
-  lcd->setCursor(0, 0);
-  lcd->print("Ready");
-  Serial.println("[5] 준비 완료");
-
-  // --- Supabase 폴링을 Core 0으로 (얼굴과 동시 실행) ---
-  xTaskCreatePinnedToCore(networkTask, "net", 10240, nullptr, 1, nullptr, 0);
-}
-
-void loop() {
-  runDemo();   // 얼굴 애니메이션 (Core 1)
-}

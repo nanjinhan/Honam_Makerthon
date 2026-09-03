@@ -33,6 +33,17 @@ export interface Sensors {
   humidity: number // 0-100 %
   battery: number // 0-100 %
   waterTank: number // 0-100 % (스테이션 잔량)
+
+  /*
+   * ── 실기기에 실제로 배선된 센서 ────────────────────────────────
+   * 위 필드들과 달리 이건 ESP32에서 실측이 올라온다. 목업으로 돌 때는
+   * mockEngine이 그럴듯한 값을 만들어 넣는다.
+   */
+  luxL: number // BH1750 왼쪽 (0x23)
+  luxR: number // BH1750 오른쪽 (0x5C)
+  /** 초음파 앞 거리(cm). **-1이면 "앞이 비었음"**이지 0cm가 아니다. */
+  distance: number
+  irNear: boolean // IR 근접 감지
 }
 
 export interface LogEntry {
@@ -40,6 +51,25 @@ export interface LogEntry {
   kind: LogKind
   msg: string
 }
+
+/**
+ * 상단 Dynamic Island를 띄울 만한 "긴급" 상황 — SPEC §5 재해석.
+ *
+ * 예전엔 섬이 항상 떠 있으면서 평상시 행동("대기 중")까지 알렸다. 늘 떠 있으니
+ * 아무도 안 보게 되고 화면만 먹었다. 이제 평상시 행동은 홈 카드 안으로 내리고,
+ * 섬은 **놀랄 일이 실제로 생겼을 때만** 내려온다.
+ */
+export type AlertKind = 'obstacle' | 'thirsty'
+
+export interface UrgentAlert {
+  kind: AlertKind
+  msg: string
+  /** 이 시각이 지나면 스스로 사라진다 */
+  until: number
+}
+
+/** 부딪힘 같은 순간 이벤트를 이만큼 띄우고 내린다 */
+export const ALERT_MS = 6_000
 
 export interface Stats {
   waterCount: number
@@ -62,6 +92,8 @@ export interface RobotState {
   /** SPEC §8-4의 3초 유지를 setTimeout 없이 처리하기 위한 만료 시각 */
   ownerNearUntil: number
   logs: LogEntry[]
+  /** 지금 섬을 내려야 할 긴급 상황. 없으면 섬 자체가 화면에서 사라진다. */
+  alert: UrgentAlert | null
   stats: Stats
   /** 방별 누적 체류시간(초). 홈의 방 카드에 "체류 4분"으로 나간다. */
   roomTime: Record<string, number>
@@ -82,6 +114,10 @@ export interface RobotActions {
   /** 헤더 프로필 아이콘 탭 = 주인이 귀가한 척. 실기기에서는 BLE RSSI가 대신한다. */
   triggerOwnerNear: () => void
   pushLog: (kind: LogKind, msg: string) => void
+  /** 섬을 내린다. ms를 안 주면 ALERT_MS 동안 떴다가 스스로 사라진다. */
+  raiseAlert: (kind: AlertKind, msg: string, ms?: number) => void
+  /** 만료된 알림을 치운다. 엔진이 매 틱 부른다. */
+  sweepAlert: () => void
   bumpStats: (patch: Partial<Stats>) => void
   addRoomTime: (roomId: string, seconds: number) => void
   /** 수동 입력이 들어오면 자율을 멈추고 10초 홀드를 건다 */
@@ -117,11 +153,16 @@ function initialState(): RobotState {
       humidity: 48,
       battery: 88,
       waterTank: 64,
+      luxL: 640,
+      luxR: 674,
+      distance: -1,
+      irNear: false,
     },
     conn: 'mock',
     ownerNear: false,
     ownerNearUntil: 0,
     logs: [],
+    alert: null,
     stats: { waterCount: 0, distance: 0, sunMinutes: 0, greetCount: 0 },
     roomTime: {},
     manualHoldUntil: 0,
@@ -150,6 +191,12 @@ export const robotStore = createStore<RobotStore>()((set) => ({
 
   pushLog: (kind, msg) =>
     set((s) => ({ logs: [{ t: Date.now(), kind, msg }, ...s.logs].slice(0, LOG_LIMIT) })),
+
+  raiseAlert: (kind, msg, ms = ALERT_MS) =>
+    set({ alert: { kind, msg, until: Date.now() + ms } }),
+
+  sweepAlert: () =>
+    set((s) => (s.alert && s.alert.until <= Date.now() ? { alert: null } : {})),
 
   bumpStats: (patch) => set((s) => ({ stats: { ...s.stats, ...patch } })),
 

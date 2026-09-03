@@ -27,6 +27,13 @@ interface SensorMsg {
   humidity?: number
   battery?: number
   waterTank?: number
+  /** BH1750 왼쪽/오른쪽 실측 */
+  luxL?: number
+  luxR?: number
+  /** 초음파 앞 거리(cm). -1은 "앞이 비었음" */
+  distance?: number
+  /** IR 근접. 펌웨어 필드명이 ir, 스토어 필드명이 irNear라 여기서 옮겨 담는다 */
+  ir?: boolean
 }
 interface EventMsg {
   type: 'event'
@@ -76,8 +83,10 @@ function handle(raw: string) {
   const s = get()
 
   if (msg.type === 'sensor') {
-    const { type: _t, ...patch } = msg
-    s.applySensor(patch)
+    // 필드를 하나씩 옮겨 담는다. 예전엔 통째로 스프레드했는데, 그러면 펌웨어가
+    // 새 필드(ir 등)를 하나 추가할 때마다 스토어에 정체불명 키가 섞여 들어간다.
+    const { type: _t, ir, ...rest } = msg
+    s.applySensor(ir === undefined ? rest : { ...rest, irNear: ir })
     return
   }
   if (msg.type === 'state') {
@@ -93,7 +102,11 @@ function handle(raw: string) {
       owner_near: '실기기 주인 감지',
       obstacle: '장애물 감지 · 우회',
     }
-    s.pushLog(msg.kind === 'obstacle' ? 'warn' : 'water', msg.msg || text[msg.kind])
+    const line = msg.msg || text[msg.kind]
+    s.pushLog(msg.kind === 'obstacle' ? 'warn' : 'water', line)
+
+    // 앞이 막힌 건 놀랄 일이다 — 이때만 상단 섬을 내린다
+    if (msg.kind === 'obstacle') s.raiseAlert('obstacle', line)
   }
 }
 

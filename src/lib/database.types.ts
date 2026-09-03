@@ -57,6 +57,30 @@ export type Database = {
         }
         Relationships: []
       }
+      robot_command: {
+        Row: {
+          dir: string
+          id: number
+          seq: number
+          spd: number
+          updated_at: string
+        }
+        Insert: {
+          dir?: string
+          id?: number
+          seq?: number
+          spd?: number
+          updated_at?: string
+        }
+        Update: {
+          dir?: string
+          id?: number
+          seq?: number
+          spd?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       robot_logs: {
         Row: {
           created_at: string
