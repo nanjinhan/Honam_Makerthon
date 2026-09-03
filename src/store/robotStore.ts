@@ -1,0 +1,166 @@
+/**
+ * 로봇 상태 — SPEC §6
+ *
+ * localStorage/sessionStorage는 쓰지 않는다. 전부 메모리.
+ * 스토어는 vanilla로 만들어서 시뮬레이션 엔진이 React 밖에서도 돌릴 수 있게 한다.
+ */
+import { useStore } from 'zustand'
+import { createStore } from 'zustand/vanilla'
+
+import type { Point } from '@/data/floorplan'
+import { pointOf } from '@/data/floorplan'
+
+export type Mode = 'auto' | 'manual'
+export type Behavior =
+  | 'idle'
+  | 'patrol'
+  | 'seek_light'
+  | 'go_water'
+  | 'docking'
+  | 'watering'
+  | 'greet'
+  | 'returning'
+export type Face = 'neutral' | 'happy' | 'thirsty' | 'sleepy' | 'love' | 'excited'
+export type LedMode = 'solid' | 'breathe' | 'rainbow' | 'off'
+export type Conn = 'mock' | 'connecting' | 'live' | 'error'
+export type LogKind = 'water' | 'light' | 'greet' | 'move' | 'warn' | 'system'
+
+export interface Sensors {
+  moisture: number // 0-100 %
+  nutrient: number // 0-100 %
+  lux: number // 0-2000
+  temp: number // ℃
+  humidity: number // 0-100 %
+  battery: number // 0-100 %
+  waterTank: number // 0-100 % (스테이션 잔량)
+}
+
+export interface LogEntry {
+  t: number
+  kind: LogKind
+  msg: string
+}
+
+export interface Stats {
+  waterCount: number
+  distance: number // m
+  sunMinutes: number
+  greetCount: number
+}
+
+export interface RobotState {
+  mode: Mode
+  behavior: Behavior
+  face: Face
+  led: { r: number; g: number; b: number; mode: LedMode }
+  pos: { x: number; y: number; heading: number }
+  targetPos: Point | null
+  path: Point[]
+  sensors: Sensors
+  conn: Conn
+  ownerNear: boolean
+  /** SPEC §8-4의 3초 유지를 setTimeout 없이 처리하기 위한 만료 시각 */
+  ownerNearUntil: number
+  logs: LogEntry[]
+  stats: Stats
+  /** 방별 누적 체류시간(초). 홈의 방 카드에 "체류 4분"으로 나간다. */
+  roomTime: Record<string, number>
+  manualHoldUntil: number
+}
+
+export interface RobotActions {
+  setMode: (mode: Mode) => void
+  setBehavior: (behavior: Behavior) => void
+  setFace: (face: Face) => void
+  setLed: (led: Partial<RobotState['led']>) => void
+  setPos: (pos: Partial<RobotState['pos']>) => void
+  setTarget: (target: Point | null) => void
+  setPath: (path: Point[]) => void
+  applySensor: (patch: Partial<Sensors>) => void
+  setConn: (conn: Conn) => void
+  setOwnerNear: (near: boolean) => void
+  /** 헤더 프로필 아이콘 탭 = 주인이 귀가한 척. 실기기에서는 BLE RSSI가 대신한다. */
+  triggerOwnerNear: () => void
+  pushLog: (kind: LogKind, msg: string) => void
+  bumpStats: (patch: Partial<Stats>) => void
+  addRoomTime: (roomId: string, seconds: number) => void
+  /** 수동 입력이 들어오면 자율을 멈추고 10초 홀드를 건다 */
+  manualInput: () => void
+  reset: () => void
+}
+
+export type RobotStore = RobotState & RobotActions
+
+/** 마지막 수동 입력 후 이 시간이 지나면 자율로 복귀한다 — SPEC §11-3 */
+export const MANUAL_HOLD_MS = 10_000
+/** 주인 감지 유지 시간 — SPEC §8-4 */
+export const OWNER_NEAR_MS = 3_000
+/** 로그 상한. 데모 내내 돌아도 메모리가 새지 않게 */
+export const LOG_LIMIT = 200
+
+const START = pointOf('hall_n')
+
+function initialState(): RobotState {
+  return {
+    mode: 'auto',
+    behavior: 'idle',
+    face: 'neutral',
+    led: { r: 47, g: 107, b: 234, mode: 'breathe' },
+    pos: { x: START.x, y: START.y, heading: -90 },
+    targetPos: null,
+    path: [],
+    sensors: {
+      moisture: 51,
+      nutrient: 72,
+      lux: 657,
+      temp: 24.2,
+      humidity: 48,
+      battery: 88,
+      waterTank: 64,
+    },
+    conn: 'mock',
+    ownerNear: false,
+    ownerNearUntil: 0,
+    logs: [],
+    stats: { waterCount: 0, distance: 0, sunMinutes: 0, greetCount: 0 },
+    roomTime: {},
+    manualHoldUntil: 0,
+  }
+}
+
+export const robotStore = createStore<RobotStore>()((set) => ({
+  ...initialState(),
+
+  setMode: (mode) => set({ mode }),
+  setBehavior: (behavior) => set({ behavior }),
+  setFace: (face) => set({ face }),
+  setLed: (led) => set((s) => ({ led: { ...s.led, ...led } })),
+  setPos: (pos) => set((s) => ({ pos: { ...s.pos, ...pos } })),
+  setTarget: (targetPos) => set({ targetPos }),
+  setPath: (path) => set({ path }),
+
+  applySensor: (patch) => set((s) => ({ sensors: { ...s.sensors, ...patch } })),
+  setConn: (conn) => set({ conn }),
+
+  setOwnerNear: (near) =>
+    set((s) => ({ ownerNear: near, ownerNearUntil: near ? s.ownerNearUntil : 0 })),
+
+  triggerOwnerNear: () =>
+    set({ ownerNear: true, ownerNearUntil: Date.now() + OWNER_NEAR_MS }),
+
+  pushLog: (kind, msg) =>
+    set((s) => ({ logs: [{ t: Date.now(), kind, msg }, ...s.logs].slice(0, LOG_LIMIT) })),
+
+  bumpStats: (patch) => set((s) => ({ stats: { ...s.stats, ...patch } })),
+
+  addRoomTime: (roomId, seconds) =>
+    set((s) => ({ roomTime: { ...s.roomTime, [roomId]: (s.roomTime[roomId] ?? 0) + seconds } })),
+
+  manualInput: () => set({ mode: 'manual', manualHoldUntil: Date.now() + MANUAL_HOLD_MS }),
+
+  reset: () => set(initialState()),
+}))
+
+export function useRobotStore<T>(selector: (state: RobotStore) => T): T {
+  return useStore(robotStore, selector)
+}

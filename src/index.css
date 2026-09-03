@@ -1,0 +1,92 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* SPEC §2-4 — CDN이 아니라 로컬 파일. 발표장에 인터넷이 없어도 폰트가 살아 있어야 한다. */
+@font-face {
+  font-family: 'Pretendard Variable';
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/PretendardVariable.woff2') format('woff2-variations');
+}
+
+@layer base {
+  /*
+   * SPEC §4-2 — 라이트 단일 테마. `.dark` 클래스는 쓰지 않는다.
+   * 액센트는 파랑 하나뿐이다. 초록은 UI가 아니라 오직 식물을 의미한다.
+   */
+  :root {
+    --background: 214 40% 97%; /* #F4F7FB */
+    --foreground: 215 30% 12%; /* #161D28 */
+
+    --card: 0 0% 100%;
+    --card-foreground: 215 30% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 30% 12%;
+
+    --primary: 220 85% 55%; /* #2F6BEA — 단 하나의 액센트 */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 214 32% 94%; /* #EBF0F7 */
+    --secondary-foreground: 215 25% 27%;
+
+    --muted: 214 32% 94%;
+    --muted-foreground: 215 16% 47%; /* #6B7A8F */
+
+    --accent: 214 32% 94%;
+    --accent-foreground: 215 30% 12%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 25% 91%; /* #E4E9F0 */
+    --input: 214 25% 91%;
+    --ring: 220 85% 55%;
+    --radius: 1.25rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    @apply antialiased;
+    /* 한글은 단어 중간에서 줄바꿈되면 안 읽힌다 */
+    word-break: keep-all;
+    overflow-wrap: break-word;
+  }
+  /* SPEC §4-4 — 값이 변할 때 자릿수가 흔들리면 화면 전체가 떨어 보인다 */
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* 도킹 중 급수 스테이션의 링 펄스 — 아래 reduced-motion 규칙이 이것도 같이 끈다 */
+@keyframes fp-ripple {
+  from {
+    r: 22;
+    opacity: 0.45;
+  }
+  to {
+    r: 52;
+    opacity: 0;
+  }
+}
+
+.fp-ripple {
+  animation: fp-ripple 1.6s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
