@@ -221,7 +221,7 @@ robotStore 변화 → src/net/cloudSync.ts (구독 + 스로틀) → Supabase 4�
                                           lcd_state만 ESP32가 3초마다 GET
 ```
 
-- **`supabase/schema.sql`** — 테이블 4개(`robot_state`/`sensor_readings`/`robot_logs`/`lcd_state`)
+- **`supabase/migrations/20260903000000_init.sql`** — 테이블 4개(`robot_state`/`sensor_readings`/`robot_logs`/`lcd_state`)
   + RLS 정책(해커톤 범위라 anon 키에 전체 허용) + 초기 행. SQL Editor에 붙여넣고 실행.
 - **`src/lib/supabaseClient.ts`** — env 없으면 `supabase`가 `null`. 호출부가 전부 스킵해서
   SPEC §0-3(인터넷 없이 100% 동작)을 안 깬다. 실제로 env 없이 페이지 에러 0 확인.

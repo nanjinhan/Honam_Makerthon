@@ -1,5 +1,10 @@
--- 살아있는 스마트팜 — Supabase 스키마
--- Supabase 대시보드 → SQL Editor → New query → 이 파일 전체를 붙여넣고 Run.
+-- 살아있는 스마트팜 — Supabase 스키마 (마이그레이션)
+--
+-- 적용하는 방법 두 가지. 어느 쪽이든 결과는 같다.
+--   1) CLI:      npm run db:push
+--   2) 대시보드: SQL Editor → New query → 이 파일 전체를 붙여넣고 Run
+--
+-- 두 번 실행해도 안전하게 짜여 있다(if not exists / drop policy if exists).
 --
 -- 테이블 4개. 전부 브라우저(웹앱)가 쓴다. ESP32는 lcd_state만 읽는다.
 --   robot_state     현재 상태 스냅샷 — 행 하나만 계속 덮어쓴다 (id=1 고정)

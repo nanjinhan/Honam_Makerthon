@@ -9,7 +9,9 @@
     "lint": "oxlint",
     "sim": "tsx scripts/sim-check.ts",
     "shot": "node scripts/shot.mjs",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "db:push": "supabase db push",
+    "db:types": "supabase gen types typescript --linked > src/lib/database.types.ts"
   },
   "dependencies": {
     "@radix-ui/react-label": "^2.1.15",
@@ -45,6 +47,7 @@
     "oxlint": "^1.79.0",
     "postcss": "^8.5.26",
     "puppeteer-core": "^25.9.0",
+    "supabase": "^2.116.0",
     "tailwindcss": "^3.4.19",
     "tsx": "^4.23.13",
     "typescript": "~6.0.2",

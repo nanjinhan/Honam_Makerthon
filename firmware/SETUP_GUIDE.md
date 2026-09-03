@@ -47,7 +47,7 @@ LCD·센서 이력·로그·상태 동기화는 별도로 인터넷+Supabase를 
 ## 2단계 — 테이블 만들기 (SQL 한 번 실행)
 
 1. 왼쪽 메뉴 **SQL Editor** → **New query**
-2. 이 프로젝트의 `supabase/schema.sql` 파일을 열어 **전체 내용을 복사**해서 붙여넣기
+2. 이 프로젝트의 `supabase/migrations/20260903000000_init.sql` 파일을 열어 **전체 내용을 복사**해서 붙여넣기
 3. 우측 하단 **Run** (또는 Ctrl+Enter)
 
 테이블 4개(`robot_state`, `sensor_readings`, `robot_logs`, `lcd_state`)가 만들어집니다.
@@ -179,8 +179,8 @@ SDA        →  GPIO 21
 SCL        →  GPIO 22
 ```
 
-I2C 주소를 모르면 **파일 → 예제 → Wire → i2c_scanner**를 먼저 돌려서 확인하세요.
-보통 `0x27` 아니면 `0x3F`입니다.
+**I2C 주소는 신경 안 쓰셔도 됩니다** — 스케치가 부팅할 때 알아서 찾습니다.
+(보통 `0x27` 아니면 `0x3F`인데, 모듈마다 달라서 자동 탐지하도록 해뒀습니다.)
 
 **코드** — 와이파이 비밀번호는 `.ino` 파일에 직접 안 적습니다. 거기 적으면 git에
 그대로 커밋돼서 공개 저장소에 비밀번호가 노출되기 때문입니다. 대신:
@@ -199,14 +199,16 @@ const char* SUPABASE_ANON_KEY = "eyJ..." 또는 "sb_publishable_...";  // 3단�
 3. `firmware/lcd_wifi/lcd_wifi.ino`는 아두이노 IDE에서 그대로 열면 됩니다 —
    같은 폴더의 `secrets.h`를 자동으로 인식합니다. `.ino` 자체는 손댈 게 없습니다.
 
-LCD 주소가 `0x27`이 아니라면:
+**업로드** 버튼(→) 클릭. 업로드 끝나면 **툴 → 시리얼 모니터**(보드레이트 115200)를 열어서
+이 세 줄이 순서대로 뜨는지 확인합니다:
 
-```cpp
-LiquidCrystal_I2C lcd(0x27, 16, 2);   // 0x27을 실제 주소로
+```
+I2C 장치 발견: 0x27          ← LCD 주소를 찾았다는 뜻
+와이파이 연결 중....
+연결됨. IP: 192.168.x.x
 ```
 
-**업로드** 버튼(→) 클릭. 업로드 끝나면 **툴 → 시리얼 모니터**(보드레이트 115200)를 열어서
-`와이파이 연결 중....` → `연결됨. IP: ...` 이 뜨는지 확인합니다.
+`I2C 장치를 못 찾음`이 뜨면 배선(SDA=21, SCL=22, 5V, GND)을 다시 확인하세요.
 
 ---
 
@@ -224,7 +226,7 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);   // 0x27을 실제 주소로
 
 ```
 1. Supabase 프로젝트 생성 (Seoul 리전)
-2. SQL Editor에서 supabase/schema.sql 실행 → 테이블 4개 생성
+2. SQL Editor에서 supabase/migrations/20260903000000_init.sql 실행 → 테이블 4개 생성
 3. Project URL / anon key 확인·기록
 4. vercel login / link
 5. .env.local + vercel env add 로 Supabase 키 등록
