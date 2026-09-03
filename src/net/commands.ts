@@ -7,6 +7,7 @@
  */
 import { manualDrive, type Dir } from '@/sim/mockEngine'
 import { robotStore, type Face, type LedMode } from '@/store/robotStore'
+import { setLcdText, twoLines } from './lcd'
 import { send } from './ws'
 
 const get = () => robotStore.getState()
@@ -29,14 +30,27 @@ export function sendLed(led: { r: number; g: number; b: number; mode: LedMode })
   send({ cmd: 'LED', ...led })
 }
 
-const ACT_TEXT: Record<'greet' | 'drink' | 'sound' | 'spin', string> = {
+export type ActionId = 'greet' | 'drink' | 'sound' | 'spin'
+
+const ACT_TEXT: Record<ActionId, string> = {
   greet: '인사 동작 실행',
   drink: '물 마시기 동작 실행',
   sound: '소리내기',
   spin: '제자리 회전',
 }
 
-export function sendAct(v: 'greet' | 'drink' | 'sound' | 'spin') {
+/**
+ * 동작 버튼을 누르면 LCD에도 이 문구가 뜬다.
+ * 1602 LCD는 한글을 못 찍어서 영문으로 쓰고, 한 줄 16칸을 넘지 않게 잡았다.
+ */
+const ACT_LCD: Record<ActionId, string> = {
+  greet: twoLines('HELLO OWNER!', 'SAESSAK IS HAPPY'),
+  drink: twoLines('DRINKING WATER', 'GULP GULP...'),
+  sound: twoLines('BEEP BEEP!', 'SAESSAK SINGS'),
+  spin: twoLines('SPINNING~', 'WHEEE!'),
+}
+
+export function sendAct(v: ActionId) {
   const s = get()
   s.manualInput()
   send({ cmd: 'ACT', v })
@@ -45,6 +59,9 @@ export function sendAct(v: 'greet' | 'drink' | 'sound' | 'spin') {
   if (v === 'greet') s.setFace('love')
   if (v === 'drink') s.setFace('excited')
   if (v === 'spin') s.setPos({ heading: s.pos.heading + 180 })
+
+  // Supabase가 없으면 조용히 넘어간다 — 목업 데모는 그대로 돌아야 한다
+  void setLcdText(ACT_LCD[v])
 }
 
 export function sendMode(v: 'auto' | 'manual') {

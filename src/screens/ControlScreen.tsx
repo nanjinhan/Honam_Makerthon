@@ -188,7 +188,7 @@ export function ControlScreen({ onGoMap }: { onGoMap?: () => void }) {
         <LcdSender />
       </Section>
 
-      <Section title="동작">
+      <Section title="동작 (누르면 LCD에도 표시됩니다)">
         <div className="grid grid-cols-2 gap-3">
           {ACTIONS.map(({ v, label, icon: Icon }) => (
             <NeumorphButton
