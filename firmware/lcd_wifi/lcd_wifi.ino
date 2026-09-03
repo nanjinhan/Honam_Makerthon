@@ -12,7 +12,7 @@
  *
  * ── 배선 (I2C 1602, PCF8574 백팩 기준) ──────────────────────────
  *   LCD VCC → 5V,  GND → GND,  SDA → GPIO21,  SCL → GPIO22
- *   I2C 주소는 보통 0x27 아니면 0x3F. 모르면 "I2C Scanner" 예제를 먼저 돌려서 확인한다.
+ *   I2C 주소(0x27 / 0x3F 등)는 스케치가 알아서 찾는다. 따로 스캐너를 돌릴 필요 없다.
  *
  * ── 이 스케치가 하는 일 ────────────────────────────────────────
  *   1. 집 와이파이(공유기)에 접속한다 — ESP32가 SoftAP를 켜는 게 아니라
@@ -38,7 +38,25 @@
 // (.gitignore로 제외됨)에 실제 값이 있고, 없으면 secrets.h.example을 복사해서 만든다.
 #include "secrets.h"
 
-LiquidCrystal_I2C lcd(0x27, 16, 2);  // 주소, 가로 16칸, 세로 2줄
+/**
+ * LCD의 I2C 주소는 모듈마다 다르다(대부분 0x27, 일부 0x3F).
+ * 틀리면 아무것도 안 뜨거나 글자가 깨지는데, 초보가 원인 찾기 제일 어려운 지점이라
+ * 스케치가 직접 I2C 버스를 훑어서 찾는다. 못 찾으면 0x27로 시도한다.
+ * → 별도 I2C Scanner 예제를 돌릴 필요가 없다.
+ */
+LiquidCrystal_I2C* lcd = nullptr;
+
+uint8_t findLcdAddress() {
+  for (uint8_t addr = 1; addr < 127; addr++) {
+    Wire.beginTransmission(addr);
+    if (Wire.endTransmission() == 0) {
+      Serial.printf("I2C 장치 발견: 0x%02X\n", addr);
+      return addr;
+    }
+  }
+  Serial.println("I2C 장치를 못 찾음 — 배선(SDA=21, SCL=22) 확인 필요. 0x27로 시도합니다.");
+  return 0x27;
+}
 
 unsigned long lastPoll = 0;
 const unsigned long POLL_MS = 3000;   // 너무 자주 부르면 무료 API 호출 한도를 금방 쓴다
@@ -59,12 +77,12 @@ void connectWifi() {
 
 /** LCD 16칸을 넘기면 잘라서 보여준다. 한글은 애초에 웹 쪽에서 걸러 보낸다. */
 void showOnLcd(const String& text) {
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print(text.substring(0, 16));
+  lcd->clear();
+  lcd->setCursor(0, 0);
+  lcd->print(text.substring(0, 16));
   if (text.length() > 16) {
-    lcd.setCursor(0, 1);
-    lcd.print(text.substring(16, 32));
+    lcd->setCursor(0, 1);
+    lcd->print(text.substring(16, 32));
   }
 }
 
@@ -120,16 +138,19 @@ void setup() {
   Serial.begin(115200);
 
   Wire.begin();          // 기본 SDA=21, SCL=22. 핀을 바꿨다면 Wire.begin(SDA, SCL)로.
-  lcd.init();
-  lcd.backlight();
-  lcd.setCursor(0, 0);
-  lcd.print("Connecting...");
+  delay(50);             // I2C 백팩이 깨어날 시간
+
+  lcd = new LiquidCrystal_I2C(findLcdAddress(), 16, 2);
+  lcd->init();
+  lcd->backlight();
+  lcd->setCursor(0, 0);
+  lcd->print("Connecting...");
 
   connectWifi();
 
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("Ready");
+  lcd->clear();
+  lcd->setCursor(0, 0);
+  lcd->print("Ready");
 }
 
 void loop() {
