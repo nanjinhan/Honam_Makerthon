@@ -52,21 +52,103 @@
 
 ## ⚠️ 다음에 할 일 (여기부터가 남은 작업)
 
-### 결정된 사항: **ESP32 보드 1개로 전부 처리**
+### 결정된 사항
 
-그래서 지금 나뉘어 있는 두 스케치를 **하나로 합쳐야 합니다.**
+1. **ESP32 보드 1개**로 전부 처리 (모터·센서·화면 전부)
+2. **화면은 2개** — 역할을 나눈다
+   | 화면 | 통신 | 역할 | 상태 |
+   |---|---|---|---|
+   | 1602 I2C LCD | I2C (SDA=21, SCL=22) | 글자 | ✅ 동작 확인 완료 |
+   | 2.8" TFT SPI | SPI | 로봇 표정 | 코드 있음, 미통합 |
+
+그래서 스케치 **3개**를 하나로 합쳐야 합니다.
 
 | 스케치 | 통신 방식 | 상태 |
 |---|---|---|
-| `firmware/smartfarm_esp32/smartfarm_esp32.ino` | WebSocket (같은 와이파이, 즉시) | 뼈대만 있음, 미업로드 |
+| `firmware/smartfarm_esp32/smartfarm_esp32.ino` | WebSocket (같은 와이파이, 즉시) | 뼈대만, 미업로드 |
 | `firmware/lcd_wifi/lcd_wifi.ino` | Supabase REST (인터넷, 3초) | **동작 확인 완료**, 현재 보드에 올라가 있음 |
+| `firmware/face_tft/face_tft.ino` | 없음 (혼자 데모 반복) | 팀원 작성, 완성도 높음 |
 
-**합치는 방향**: `smartfarm_esp32.ino`를 본체로 삼고, `lcd_wifi.ino`의 폴링 로직
-(`pollOnce()` + LCD 초기화)을 그 `loop()`에 넣는다.
+**합치는 방향**: `smartfarm_esp32.ino`를 본체로 삼고 나머지 둘을 흡수.
 
-> 주의: `smartfarm_esp32.ino`는 **SoftAP 모드**(ESP32가 공유기 역할)이고
-> `lcd_wifi.ino`는 **STA 모드**(에그에 접속)다. 합칠 때 이 충돌을 해결해야 함.
-> ESP32는 `WIFI_AP_STA` 모드로 둘 다 동시에 가능하지만 검증 안 해봄.
+> ⚠️ **와이파이 모드 충돌**: `smartfarm_esp32.ino`는 SoftAP 모드(ESP32가 공유기 역할),
+> `lcd_wifi.ino`는 STA 모드(에그에 접속). `WIFI_AP_STA`로 둘 다 가능하지만 검증 안 해봄.
+
+---
+
+## 🔴 얼굴 화면(TFT) — 합치기 전에 풀어야 할 3가지
+
+### (1) 드라이버 칩이 ST7789가 아닐 가능성이 큼 — **가장 먼저 확인할 것**
+
+실물 보드: 빨간 기판 + 터치칩(HR2046) + SD카드 슬롯 + 2.8인치.
+이 조합은 거의 항상 **ILI9341**이다. ST7789는 보통 터치·SD 없는 작은 보드에 쓰인다.
+
+**증거**: 팀원 코드에 `PANEL_COLOR_COMPLEMENT = true`로 색을 소프트웨어 반전시키는
+보정이 들어있다. ST7789 초기화는 `INVON`(색반전) 명령을 보내는데 ILI9341이 이를
+그대로 따르면 화면이 전부 반전된다 — 지금 증상과 정확히 일치.
+
+**확인 방법** (5분):
+```cpp
+#include <Adafruit_ILI9341.h>          // ST7789 대신
+Adafruit_ILI9341 tft(5, 2, 16);        // CS, DC, RST
+// setup:  tft.begin();                 ← tft.init(240,320) 아님
+// 그리고 PANEL_COLOR_COMPLEMENT = false
+```
+색이 정상으로 나오면 ILI9341 확정 → **소프트웨어 색보정을 통째로 삭제 가능.**
+
+### (2) 핀 충돌 — TFT RESET vs 수중펌프
+
+둘 다 **GPIO 4**를 쓴다. 그대로 두면 화면 리셋 시 펌프가 오작동.
+→ **TFT RESET을 GPIO 16으로 이동** (`#define TFT_RST 16`). 펌프는 그대로.
+
+**TFT 배선 (확정)**
+| TFT 핀 | ESP32 |
+|---|---|
+| VCC | **3.3V** (5V 금지) |
+| GND | GND |
+| CS | GPIO 5 |
+| RESET | **GPIO 16** ← 4에서 변경 |
+| DC | GPIO 2 |
+| SDI(MOSI) | GPIO 23 |
+| SCK | GPIO 18 |
+| LED | 3.3V (백라이트 상시) |
+| SDO(MISO) | 연결 안 함 |
+| T_* 5개 (터치) | 연결 안 함 |
+
+1602(21, 22)와 겹치지 않음. 그대로 두면 됨.
+
+### (3) 모든 애니메이션이 `delay()`로 블로킹 — **설계상 제일 중요**
+
+`animDrinking()` 하나가 10초 넘게 CPU를 붙잡는다. 그동안 Supabase 폴링·모터 명령
+수신·센서 읽기가 **전부 멈춘다.** 심사위원이 물 마시는 중 D-패드를 누르면 10초간 무반응.
+
+**해결책: ESP32의 두 코어를 나눠 쓴다** (합의된 방향)
+```
+코어 0  →  얼굴 애니메이션   (팀원 코드 그대로, delay() 그대로 둬도 됨)
+코어 1  →  와이파이·Supabase·WebSocket·센서
+```
+`xTaskCreatePinnedToCore()`로 얼굴을 별도 태스크에 넣고, 둘은 공유 변수 하나로만 소통:
+```cpp
+volatile FaceState currentFace = FACE_IDLE;   // 네트워크 쪽이 씀, 얼굴 쪽이 읽음
+```
+**팀원 코드를 거의 안 고쳐도 되는 게 이 방식의 핵심 장점.**
+
+### 표정 매핑 (웹 6종 → 팀원 애니메이션) — 이미 다 대응됨
+
+| 웹앱 | face_tft.ino |
+|---|---|
+| `neutral` | `idleWithBlink()` |
+| `happy` | `animHappyBounce()` |
+| `thirsty` | `animNeedWater()` (물 말풍선 포함) |
+| `sleepy` | `animSleepy()` |
+| `love` | `animKiss()` |
+| `excited` | `animSurprise()` |
+
+**동작 방식 (합의됨)**: 평소엔 로봇 실제 상태를 따라가고(수분 부족 → `animNeedWater`,
+급수 중 → `animDrinking`), 웹에서 표정 버튼을 누르면 즉시 그 표정으로 전환,
+아무 일 없으면 `idleWithBlink()` + 가끔 `animLookAround()`.
+
+---
 
 ### 팀원이 채워야 할 빈칸 (`smartfarm_esp32.ino`)
 
@@ -94,9 +176,10 @@ ESP32 → 웹:  {"type":"sensor","moisture":51,"nutrient":72,"lux":657,
 ```
 
 ### 그 외 남은 것
+- [ ] **TFT 드라이버 칩 확인** (ILI9341 vs ST7789) ← 이것부터
+- [ ] 스케치 3개 합치기 (두 코어 분리 방식)
 - [ ] 실물 모터 연결 후 D-패드로 실제 주행 테스트
 - [ ] 온습도 센서(DHT/SHT) 코드 작성 → `sendSensors()`에 반영
-- [ ] OLED 표정 6종 구현
 - [ ] 네오픽셀 LED 링 구현
 - [ ] DB에 쌓인 센서 이력을 **화면에 그래프로 보여주는 기능** (아직 없음)
 - [ ] 폰으로 접속 테스트 / 노트북+폰 동시 접속 (SPEC §14)
@@ -106,14 +189,16 @@ ESP32 → 웹:  {"type":"sensor","moisture":51,"nutrient":72,"lux":657,
 ## 새 대화에서 이렇게 시작하세요
 
 > **"C:\Users\wlsgk\smartfarm-web 프로젝트다. HANDOFF.md 읽고 상황 파악해줘.
-> ESP32 보드 하나에 모터·센서·OLED·LCD 다 물릴 거라 두 스케치를 합쳐야 한다."**
+> ESP32 보드 하나에 모터·센서·화면 2개(1602 글자용 + 2.8" TFT 얼굴용)를 다 물릴 거라
+> firmware 폴더의 스케치 3개를 합쳐야 한다."**
 
 읽으라고 할 파일 (우선순위 순):
 1. **`HANDOFF.md`** ← 이 파일. 현재 상태 전체
-2. `firmware/smartfarm_esp32/smartfarm_esp32.ino` ← 합칠 본체
-3. `firmware/lcd_wifi/lcd_wifi.ino` ← 여기 폴링 로직을 위에 넣어야 함
-4. `firmware/SETUP_GUIDE.md` ← 배선·라이브러리·연결 순서
-5. `PLAN.md` ← 왜 이렇게 만들었는지 (길어서 필요할 때만)
+2. `firmware/smartfarm_esp32/smartfarm_esp32.ino` ← 합칠 본체 (WebSocket·모터)
+3. `firmware/face_tft/face_tft.ino` ← 팀원이 만든 얼굴 애니메이션
+4. `firmware/lcd_wifi/lcd_wifi.ino` ← Supabase 폴링 로직 (동작 검증됨)
+5. `firmware/SETUP_GUIDE.md` ← 배선·라이브러리·연결 순서
+6. `PLAN.md` ← 왜 이렇게 만들었는지 (길어서 필요할 때만)
 
 ---
 
