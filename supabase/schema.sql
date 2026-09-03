@@ -59,6 +59,12 @@ alter table sensor_readings enable row level security;
 alter table robot_logs      enable row level security;
 alter table lcd_state       enable row level security;
 
+-- drop 후 create — 이 파일을 두 번 실행해도(실수로 다시 눌러도) 에러 없이 넘어간다.
+drop policy if exists "anon full access" on robot_state;
+drop policy if exists "anon full access" on sensor_readings;
+drop policy if exists "anon full access" on robot_logs;
+drop policy if exists "anon full access" on lcd_state;
+
 create policy "anon full access" on robot_state     for all using (true) with check (true);
 create policy "anon full access" on sensor_readings for all using (true) with check (true);
 create policy "anon full access" on robot_logs      for all using (true) with check (true);

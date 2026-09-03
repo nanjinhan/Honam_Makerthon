@@ -236,6 +236,22 @@ robotStore 변화 → src/net/cloudSync.ts (구독 + 스로틀) → Supabase 4�
 - **`firmware/SETUP_GUIDE.md`** — Supabase 프로젝트 생성부터 10단계로 재작성.
   "다음에 할 수 있는 것" 절에 이력을 다시 화면으로 보여주는 건 아직 안 만들었다고 명시.
 
+## 실제 배포 검증 (Supabase 프로젝트 생성 완료 후)
+
+`Honam_Makerthon` 프로젝트(Seoul)로 실제 연동까지 끝냈다. 추측이 아니라 REST API로
+직접 조회해서 4개 테이블에 실데이터가 쌓이는 것까지 확인:
+`lcd_state`에 "HELLO SAESSAK" 반영, `robot_state` 실시간 갱신, `sensor_readings` 6줄 적재.
+`.env.local` + `vercel env add ... production` + `vercel --prod` 재배포까지 완료,
+배포된 사이트(`smartfarm-web-gules.vercel.app`)에서도 페이지 에러 0으로 확인.
+
+**와이파이 비밀번호는 `secrets.h`로 분리했다.** 처음엔 `lcd_wifi.ino`에 직접 채워
+넣었는데, 이 파일이 공개 GitHub 저장소(`nanjinhan/Honam_Makerthon`)에 커밋되는 걸
+뒤늦게 인지했다. Supabase anon/publishable 키는 공개돼도 안전하게 설계된 키라
+`.ino`에 남겨도 되지만, **와이파이 비밀번호는 진짜 비밀이라 같은 파일에 두면 안 된다.**
+`secrets.h`(실제 값, `.gitignore`로 제외) / `secrets.h.example`(플레이스홀더, 커밋 대상)로
+분리하고 `.ino`는 `#include "secrets.h"`만 한다. `git status`로 `secrets.h`가
+추적 대상에서 빠진 것과 `git check-ignore`로 확인 완료.
+
 **주의**: 이 기능에서 ESP32는 SoftAP가 아니라 **일반 와이파이(공유기)에 접속**해야
 인터넷에 닿는다. 로봇 조종용 SoftAP+WebSocket 구조와는 별개로 공존한다.
 

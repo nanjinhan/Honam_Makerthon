@@ -182,15 +182,22 @@ SCL        →  GPIO 22
 I2C 주소를 모르면 **파일 → 예제 → Wire → i2c_scanner**를 먼저 돌려서 확인하세요.
 보통 `0x27` 아니면 `0x3F`입니다.
 
-**코드** — `firmware/lcd_wifi/lcd_wifi.ino`를 아두이노 IDE에서 열고, 위쪽 네 줄을
-본인 값으로 바꿉니다:
+**코드** — 와이파이 비밀번호는 `.ino` 파일에 직접 안 적습니다. 거기 적으면 git에
+그대로 커밋돼서 공개 저장소에 비밀번호가 노출되기 때문입니다. 대신:
+
+1. `firmware/lcd_wifi/` 폴더의 `secrets.h.example`을 복사해서 같은 폴더에
+   `secrets.h`라는 이름으로 저장합니다 (이 파일은 `.gitignore`로 막혀있어 git에 안 올라갑니다)
+2. `secrets.h`를 열어 본인 값으로 채웁니다:
 
 ```cpp
 const char* WIFI_SSID = "your-wifi-name";        // 집/현장 와이파이 이름 (2.4GHz만 됨)
 const char* WIFI_PASS = "your-wifi-password";
 const char* SUPABASE_URL      = "https://xxxxxxxx.supabase.co";  // 3단계 Project URL
-const char* SUPABASE_ANON_KEY = "eyJ...";                        // 3단계 anon public 키
+const char* SUPABASE_ANON_KEY = "eyJ..." 또는 "sb_publishable_...";  // 3단계 anon/publishable 키
 ```
+
+3. `firmware/lcd_wifi/lcd_wifi.ino`는 아두이노 IDE에서 그대로 열면 됩니다 —
+   같은 폴더의 `secrets.h`를 자동으로 인식합니다. `.ino` 자체는 손댈 게 없습니다.
 
 LCD 주소가 `0x27`이 아니라면:
 

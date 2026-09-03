@@ -33,14 +33,10 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
-// ── 여기 네 줄만 본인 환경에 맞게 고치면 된다 ──────────────────────
-const char* WIFI_SSID = "your-wifi-name";
-const char* WIFI_PASS = "your-wifi-password";
-// Supabase 대시보드 → Project Settings → Data API 에서 확인.
-// "Project URL" 예: https://abcdefgh.supabase.co
-const char* SUPABASE_URL       = "https://YOUR-PROJECT.supabase.co";
-// "anon public" 키. eyJ... 로 시작하는 긴 문자열.
-const char* SUPABASE_ANON_KEY  = "YOUR-ANON-KEY";
+// 와이파이 비밀번호·Supabase 키는 이 파일에 직접 안 적는다 — 여기 적으면 git에
+// 그대로 커밋돼서 공개 저장소에 비밀번호가 노출된다. 같은 폴더의 secrets.h
+// (.gitignore로 제외됨)에 실제 값이 있고, 없으면 secrets.h.example을 복사해서 만든다.
+#include "secrets.h"
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);  // 주소, 가로 16칸, 세로 2줄
 
