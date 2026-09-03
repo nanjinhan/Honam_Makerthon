@@ -7,11 +7,18 @@
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
+import type { Database } from './database.types'
+
 const url = import.meta.env.VITE_SUPABASE_URL
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-export const supabase: SupabaseClient | null =
-  url && anonKey ? createClient(url, anonKey) : null
+/**
+ * 타입은 실제 DB에서 뽑아온다(`npm run db:types`).
+ * 덕분에 테이블·컬럼 이름 오타가 실행 중이 아니라 컴파일 때 걸린다.
+ * 스키마를 바꾸면 `npm run db:push` 후 `npm run db:types`를 다시 돌린다.
+ */
+export const supabase: SupabaseClient<Database> | null =
+  url && anonKey ? createClient<Database>(url, anonKey) : null
 
 if (!supabase) {
   console.info(
