@@ -47,15 +47,24 @@
 LiquidCrystal_I2C* lcd = nullptr;
 
 uint8_t findLcdAddress() {
+  Serial.println("[2] I2C 주소 스캔 시작...");
+  uint8_t found = 0;
+
   for (uint8_t addr = 1; addr < 127; addr++) {
     Wire.beginTransmission(addr);
     if (Wire.endTransmission() == 0) {
-      Serial.printf("I2C 장치 발견: 0x%02X\n", addr);
-      return addr;
+      Serial.printf("    → 장치 발견: 0x%02X\n", addr);
+      if (found == 0) found = addr;
     }
   }
-  Serial.println("I2C 장치를 못 찾음 — 배선(SDA=21, SCL=22) 확인 필요. 0x27로 시도합니다.");
-  return 0x27;
+
+  if (found == 0) {
+    Serial.println("[2] 장치를 하나도 못 찾음 — 배선 확인 필요 (SDA=21, SCL=22, VCC=5V, GND)");
+    Serial.println("    일단 0x27로 시도합니다.");
+    return 0x27;
+  }
+  Serial.printf("[2] 사용할 주소: 0x%02X\n", found);
+  return found;
 }
 
 unsigned long lastPoll = 0;
@@ -65,13 +74,13 @@ String lastUpdatedAt = "";
 void connectWifi() {
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
-  Serial.print("와이파이 연결 중");
+  Serial.printf("[4] 와이파이 연결 중 (%s)", WIFI_SSID);
   while (WiFi.status() != WL_CONNECTED) {
     delay(400);
     Serial.print(".");
   }
   Serial.println();
-  Serial.print("연결됨. IP: ");
+  Serial.print("[4] 연결됨. IP: ");
   Serial.println(WiFi.localIP());
 }
 
@@ -136,21 +145,30 @@ void pollOnce() {
 
 void setup() {
   Serial.begin(115200);
+  // 이 딜레이가 없으면 첫 몇 줄이 시리얼 모니터에 안 찍히고 날아간다.
+  delay(1500);
+  Serial.println();
+  Serial.println("========== LCD 스케치 시작 ==========");
+  Serial.println("[1] 시리얼 정상");
 
-  Wire.begin();          // 기본 SDA=21, SCL=22. 핀을 바꿨다면 Wire.begin(SDA, SCL)로.
-  delay(50);             // I2C 백팩이 깨어날 시간
+  // 핀을 명시하고, 배선이 잘못돼도 스캔이 영원히 멈추지 않도록 타임아웃을 건다.
+  Wire.begin(21, 22);
+  Wire.setTimeOut(50);
+  delay(50);
 
   lcd = new LiquidCrystal_I2C(findLcdAddress(), 16, 2);
   lcd->init();
   lcd->backlight();
   lcd->setCursor(0, 0);
   lcd->print("Connecting...");
+  Serial.println("[3] LCD 초기화 명령 전송함");
 
   connectWifi();
 
   lcd->clear();
   lcd->setCursor(0, 0);
   lcd->print("Ready");
+  Serial.println("[5] 준비 완료 — 3초마다 Supabase 확인 시작");
 }
 
 void loop() {
