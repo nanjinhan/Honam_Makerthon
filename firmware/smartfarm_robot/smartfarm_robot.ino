@@ -191,9 +191,22 @@ constexpr int PIN_HALL  = 13;   // 도킹 감지 홀센서 (아직 안 꽂음)
  * 가르는 용도다. 이게 돌면 하드웨어는 무죄고 웹 쪽만 보면 된다.
  *
  * ⚠ 바퀴를 띄워놓고(책 위 등) 테스트할 것. 바닥에 두면 로봇이 달려나간다.
- * 확인 끝나면 0으로 꺼라 — 안 끄면 켤 때마다 혼자 움직인다.
+ *
+ * 지금은 배선이 잡혀서 꺼둔다. 나중에 모터가 또 말을 안 들으면 1로 켜서
+ * "배선 문제냐 명령 경로 문제냐"부터 가르면 된다 — 그거 가리는 데 한참 걸렸다.
  */
-#define MOTOR_SELFTEST 1
+#define MOTOR_SELFTEST 0
+
+/*
+ * 0보다 크면 이 간격(ms)마다 자가진단을 **계속 반복**한다.
+ *
+ * 부팅 때 한 번만 돌면, 배선을 고칠 때마다 재부팅해야 해서 확인이 느리다.
+ * 게다가 "부팅 직후라서 안 되는 것 아니냐"는 의심을 못 걷어낸다. 반복해서
+ * 돌려보면 그 가설이 바로 정리된다 — 선을 만지는 즉시 결과가 보인다.
+ *
+ * 배선이 잡히면 0으로 꺼라. 안 끄면 8초마다 로봇이 혼자 움직인다.
+ */
+#define MOTOR_SELFTEST_REPEAT_MS 8000
 
 // ============================================================
 // 1. 두 코어가 주고받는 값 — 이게 전부다
@@ -1003,8 +1016,25 @@ void netTask(void*) {
   bool obstacleNow = false;   // 20cm 안으로 들어왔을 때만 한 번 알린다
   bool irWas = false;
 
+  unsigned long lastSelfTest = millis();
+
   for (;;) {
     unsigned long now = millis();
+
+#if MOTOR_SELFTEST && MOTOR_SELFTEST_REPEAT_MS > 0
+    /*
+     * 배선 잡는 동안 계속 돌려본다.
+     *
+     * 반드시 이 태스크(Core 0) 안에서 돌아야 한다. 얼굴 쪽(Core 1)에서 돌리면
+     * 바로 아래 "400ms 안전정지"가 여기서 돌면서 진단 중인 모터를 꺼버린다.
+     * 여기서 돌리면 진단이 끝날 때까지 이 루프 자체가 멈춰 있으므로 안 꺼진다.
+     */
+    if (now - lastSelfTest >= MOTOR_SELFTEST_REPEAT_MS) {
+      motorSelfTest();
+      lastSelfTest = millis();
+      continue;
+    }
+#endif
 
     // 명령이 끊기면 정지 — 폰이 꺼져도 로봇이 계속 달리면 안 된다
     if (moving && now - lastCmdAt > CMD_TIMEOUT_MS) {
