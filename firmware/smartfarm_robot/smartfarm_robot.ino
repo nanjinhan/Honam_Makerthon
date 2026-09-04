@@ -972,7 +972,14 @@ const unsigned long CMD_POLL_MS = 300;
  */
 const unsigned long CLOUD_DEADMAN_MS = 1200;
 
-long long gCloudSeq   = -1;   // 마지막으로 본 seq
+/*
+ * seq는 웹이 보내는 Date.now() 밀리초라 1.78e12쯤 된다 — int(최대 21억)를
+ * 훌쩍 넘는다. ArduinoJson에서 기본값 0으로 읽으면 int로 해석돼 값이 0이 나오고,
+ * 그러면 "안 바뀌었다"고 판단해 **첫 명령 이후 영원히 아무것도 안 먹는다.**
+ * 실제로 시리얼에 [모터] STOP 하나만 찍히고 끝났던 게 이 때문이다.
+ * double은 2^53까지 정수를 정확히 담으므로 안전하다.
+ */
+double gCloudSeq = -1;        // 마지막으로 본 seq
 unsigned long gCloudSeqAt = 0;   // 그 seq를 처음 본 시각
 bool gCloudDriving = false;   // 지금 클라우드 명령으로 달리는 중인가
 
@@ -985,7 +992,7 @@ void pollCommand() {
 
   const char* dir = doc[0]["dir"] | "STOP";
   int spd          = doc[0]["spd"] | 0;
-  long long seq    = doc[0]["seq"] | 0;
+  double seq       = doc[0]["seq"] | 0.0;
 
   unsigned long now = millis();
 
@@ -996,6 +1003,7 @@ void pollCommand() {
     gCloudSeqAt = now;
     gCloudDriving = strcmp(dir, "STOP") != 0;
     if (first) Serial.println("[cloud] 조종 명령 수신 시작 — 클라우드 경로 정상");
+    Serial.printf("[cloud] %s spd=%d seq=%.0f\n", dir, spd, seq);
     applyMove(dir, spd);
     return;
   }
