@@ -32,3 +32,4 @@ dist-ssr
 
 # 와이파이 비밀번호 등 실제 값이 든 파일 — *.example 템플릿만 커밋한다
 firmware/**/secrets.h
+scripts/.*.cjs
