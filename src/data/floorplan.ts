@@ -216,3 +216,85 @@ export function roomLux(id: RoomId): number {
 export function roomAt(p: Point): Room | undefined {
   return ROOMS.find((r) => p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h)
 }
+
+/*
+ * ── 벽과 문 ──────────────────────────────────────────────────────
+ *
+ * 문 위치는 원래 FloorPlanSVG 안에 "그림용"으로만 있었다. 수동 조종이 벽을 못
+ * 뚫게 하려면 **판정에도 같은 값**이 필요한데, 그림과 판정이 서로 다른 표를 보면
+ * 언젠가 어긋난다 — 화면에는 문이 뚫려 있는데 로봇은 못 지나가는 식으로.
+ * 그래서 여기 한 곳에 두고 SVG가 이걸 가져다 그린다.
+ */
+export const WALL_W = 10
+export const DOOR_W = 74
+
+/** 벽을 지워 문을 낸다. 세로벽(v)은 x가, 가로벽(h)은 y가 벽의 중심선이다. */
+export const DOORS = [
+  { x: 340, y: 160, dir: "v" }, // 거실 ↔ 다이닝
+  { x: 660, y: 160, dir: "v" }, // 다이닝 ↔ 주방
+  { x: 300, y: 340, dir: "v" }, // 욕실 ↔ 복도
+  { x: 300, y: 540, dir: "v" }, // 안방 ↔ 복도
+  { x: 520, y: 330, dir: "v" }, // 욕실2 ↔ 복도
+  { x: 520, y: 560, dir: "v" }, // 침실3 ↔ 복도
+  { x: 400, y: 300, dir: "h" }, // 다이닝 ↔ 복도
+  { x: 780, y: 300, dir: "h" }, // 주방 ↔ 침실2
+  { x: 780, y: 500, dir: "h" }, // 침실2 ↔ 침실3
+  { x: 150, y: 470, dir: "h" }, // 욕실 ↔ 안방
+  { x: 375, y: 720, dir: "h" }, // 현관
+] as const
+
+/** 로봇 반지름. 벽에서 이만큼은 떨어져 있어야 한다. */
+export const ROBOT_R = 16
+
+/** 이 자리에 로봇이 서 있을 수 있나 — 방 안이거나 문 개구부 안이어야 한다. */
+export function canStand(p: Point): boolean {
+  // 방 안쪽. 벽에 붙지 않게 ROBOT_R만큼 줄여서 본다.
+  for (const r of ROOMS) {
+    if (
+      p.x >= r.x + ROBOT_R &&
+      p.x <= r.x + r.w - ROBOT_R &&
+      p.y >= r.y + ROBOT_R &&
+      p.y <= r.y + r.h - ROBOT_R
+    ) {
+      return true
+    }
+  }
+
+  /*
+   * 문 개구부. 문은 벽 위에 있어서 위의 "방 안쪽" 판정에서 반드시 빠진다.
+   * 그래서 따로 봐줘야 방과 방 사이를 지나갈 수 있다.
+   */
+  const pad = ROBOT_R / 2                 // 문틀에 어깨가 끼지 않게
+  const reach = WALL_W / 2 + ROBOT_R      // 벽 두께를 건너가는 동안도 허용
+  for (const d of DOORS) {
+    if (d.dir === "v") {
+      if (Math.abs(p.x - d.x) <= reach && p.y >= d.y + pad && p.y <= d.y + DOOR_W - pad) return true
+    } else {
+      if (Math.abs(p.y - d.y) <= reach && p.x >= d.x + pad && p.x <= d.x + DOOR_W - pad) return true
+    }
+  }
+
+  return false
+}
+
+/**
+ * from에서 to로 가되, 벽에 막히면 갈 수 있는 데까지만 간다.
+ *
+ * 한 번에 목적지를 검사하면 안 된다 — 걸음이 벽 두께보다 크면 벽을 **건너뛰어**
+ * 반대편에 착지해버린다. 4px씩 잘게 나아가며 확인한다.
+ */
+export function moveWithWalls(from: Point, to: Point): Point {
+  // 이미 설 수 없는 자리에 있으면(자율주행이 벽 모서리를 스치고 지나간 뒤 등)
+  // 가두지 않는다. 못 움직이면 영영 못 빠져나온다.
+  if (!canStand(from)) return to
+
+  const steps = Math.max(1, Math.ceil(dist(from, to) / 4))
+  let last = from
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps
+    const p = { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t }
+    if (!canStand(p)) return last
+    last = p
+  }
+  return last
+}

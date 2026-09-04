@@ -10,7 +10,11 @@
  *
  * 문 위치는 순수하게 보여주기 위한 값이라 §12(floorplan.ts)를 건드리지 않고 여기 둔다.
  */
-import { FURNITURE, ROOMS, STATION, VIEW_H, VIEW_W, WINDOWS, roomAt } from '@/data/floorplan'
+import { FURNITURE, ROOMS, STATION, VIEW_H, VIEW_W, WINDOWS, roomAt,
+  DOORS,
+  DOOR_W as DOOR,
+  WALL_W,
+} from '@/data/floorplan'
 import { cn } from '@/lib/utils'
 import { useRobotStore } from '@/store/robotStore'
 
@@ -23,23 +27,8 @@ const FURN = '#E4EAF2'
 const FURN_DETAIL = '#D3DCE8'
 const PATH = '#B9C6D6'
 
-const WALL_W = 10
-const DOOR = 74
-
-/** 벽을 지워 문을 낸다. 세로벽은 x, 가로벽은 y가 벽의 중심선. */
-const DOORS = [
-  { x: 340, y: 160, dir: 'v' }, // 거실 ↔ 다이닝
-  { x: 660, y: 160, dir: 'v' }, // 다이닝 ↔ 주방
-  { x: 300, y: 340, dir: 'v' }, // 욕실 ↔ 복도
-  { x: 300, y: 540, dir: 'v' }, // 안방 ↔ 복도
-  { x: 520, y: 330, dir: 'v' }, // 욕실2 ↔ 복도
-  { x: 520, y: 560, dir: 'v' }, // 침실3 ↔ 복도
-  { x: 400, y: 300, dir: 'h' }, // 다이닝 ↔ 복도
-  { x: 780, y: 300, dir: 'h' }, // 주방 ↔ 침실2
-  { x: 780, y: 500, dir: 'h' }, // 침실2 ↔ 침실3
-  { x: 150, y: 470, dir: 'h' }, // 욕실 ↔ 안방
-  { x: 375, y: 720, dir: 'h' }, // 현관
-] as const
+// 벽 두께·문 위치는 floorplan.ts에서 가져온다. 그림과 충돌 판정이 같은 표를
+// 봐야 "화면엔 문이 뚫려 있는데 로봇은 못 지나감" 같은 어긋남이 안 생긴다.
 
 /** 습한 구역 — 조도와 구분되게 물색으로 따로 표시한다 */
 const HUMID = [
@@ -279,9 +268,11 @@ export function FloorPlanSVG({
 
       {/* 로봇 */}
       <g transform={`translate(${pos.x} ${pos.y}) rotate(${pos.heading})`}>
-        <circle r="15" fill="#FFFFFF" />
-        <circle r="12" fill={PRIMARY} stroke="#FFFFFF" strokeWidth="2" />
-        <path d="M 2 -5 L 13 0 L 2 5 Z" fill="#FFFFFF" />
+        {/* 1000×760 도면을 폰 폭에 맞춰 줄이면 r=12는 화면에서 6px밖에 안 된다 */}
+        <circle r="27" fill="#FFFFFF" />
+        <circle r="22" fill={PRIMARY} stroke="#FFFFFF" strokeWidth="3" />
+        {/* 어느 쪽을 보고 있는지 — 화살표도 같이 키운다 */}
+        <path d="M 3 -9 L 23 0 L 3 9 Z" fill="#FFFFFF" />
       </g>
     </svg>
   )

@@ -14,6 +14,7 @@ import {
   WAYPOINT_ROOM,
   dist,
   luxAt,
+  moveWithWalls,
   nearestWaypoint,
   pathFrom,
   pointOf,
@@ -434,12 +435,19 @@ export function manualDrive(dir: Dir, spd: number) {
     y += Math.sin(rad) * step * sign
   }
 
-  // 도면 밖으로 나가지 않게
-  s.setPos({
-    x: clamp(x, 50, 950),
-    y: clamp(y, 50, 710),
-    heading,
-  })
+  /*
+   * 벽을 뚫고 지나가지 않게 한다.
+   *
+   * 회전(heading)은 막지 않는다 — 벽에 코를 박았을 때 돌아서 빠져나올 수 있어야
+   * 하는데, 회전까지 막으면 그 자리에 영영 갇힌다. 막는 건 **이동뿐**이다.
+   *
+   * 자율주행은 웨이포인트 그래프를 따라가므로 이 판정을 안 거친다. 수동 조종만
+   * 사람이 아무 방향으로나 밀어붙일 수 있어서 벽을 넘을 수 있었다.
+   */
+  const want = { x: clamp(x, 50, 950), y: clamp(y, 50, 710) }
+  const next = moveWithWalls({ x: s.pos.x, y: s.pos.y }, want)
+
+  s.setPos({ x: next.x, y: next.y, heading })
 }
 
 /**
