@@ -44,6 +44,10 @@ export interface Sensors {
   /** 초음파 앞 거리(cm). **-1이면 "앞이 비었음"**이지 0cm가 아니다. */
   distance: number
   irNear: boolean // IR 근접 감지
+  /** 토양 ADC 원본값. 젖을수록 내려간다(3300 바싹마름 ~ 1800 흠뻑) */
+  soilRaw: number
+  /** 펌웨어가 판정한 5단계 상태 — VERY WET / WET / NORMAL / DRY / VERY DRY */
+  soil: string
 }
 
 export interface LogEntry {
@@ -157,6 +161,8 @@ function initialState(): RobotState {
       luxR: 674,
       distance: -1,
       irNear: false,
+      soilRaw: 2400,
+      soil: 'NORMAL',
     },
     conn: 'mock',
     ownerNear: false,

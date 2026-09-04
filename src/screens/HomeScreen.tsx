@@ -27,6 +27,19 @@ import { cn } from '@/lib/utils'
 import { commandGoTo } from '@/sim/mockEngine'
 import { useRobotStore, type Behavior } from '@/store/robotStore'
 
+/*
+ * 펌웨어가 보내는 토양 5단계를 한글로 바꾼다. 게이지 아래 "수분 %"의 % 자리에
+ * 이 글자를 넣는다 — 줄 수가 그대로라 배치가 안 흔들리고, 링 안의 숫자(%)와
+ * 겹치지 않는 정보(흙이 실제로 어떤 상태인지)가 한 칸에 같이 보인다.
+ */
+const SOIL_KO: Record<string, string> = {
+  'VERY DRY': '바싹 마름',
+  'DRY': '마름',
+  'NORMAL': '보통',
+  'WET': '젖음',
+  'VERY WET': '흠뻑',
+}
+
 /** 앞거리 링을 꽉 채우는 기준(cm). 이보다 멀면 "충분히 비었다"로 본다. */
 const DISTANCE_FULL_CM = 60
 
@@ -133,7 +146,7 @@ export function HomeScreen({
           <RingGauge
             label="수분"
             value={sensors.moisture}
-            unit="%"
+            unit={SOIL_KO[sensors.soil] ?? "%"}
             level={levelOf('moisture', sensors.moisture)}
           />
           <RingGauge

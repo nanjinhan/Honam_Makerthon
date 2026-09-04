@@ -558,12 +558,95 @@ int soilPercent(int raw) {
   return map(constrain(raw, SOIL_WET, SOIL_VERY_DRY), SOIL_VERY_DRY, SOIL_WET, 0, 100);
 }
 
-const char* soilLabel(int raw) {
-  if (raw >= SOIL_VERY_DRY) return "VERY DRY";
-  if (raw >= SOIL_DRY)      return "DRY";
-  if (raw >= SOIL_NORMAL)   return "NORMAL";
-  if (raw >= SOIL_WET)      return "WET";
-  return "VERY WET";
+
+/*
+ * ── 토양 상태를 "값"이 아니라 "상태"로 다룬다 ────────────────────
+ *
+ * 지금까지는 매번 analogRead 한 번 찍어서 라벨만 뽑아 썼다. 두 가지가 아쉬웠다.
+ *
+ *  1. ADC 한 번 값은 꽤 튄다. 실측 로그에서 1726 ↔ 1793처럼 계속 흔들렸다.
+ *     여러 번 읽어 평균을 내면 화면 숫자가 안정된다.
+ *  2. 경계값(예: 1800) 근처에서 값이 떨리면 WET ↔ VERY WET이 초당 몇 번씩
+ *     번갈아 바뀐다. 그때마다 로그를 찍거나 표정을 바꾸면 난리가 난다.
+ *     그래서 상태를 바꿀 때 여유(SOIL_MARGIN)를 둔다 — 한 번 들어간 상태에서
+ *     나오려면 경계를 그만큼 더 넘어야 한다.
+ *
+ * 상태로 다루면 "바뀌는 순간"을 잡을 수 있고, 그 순간에만 반응하면 된다.
+ */
+/* sendEvent의 정의는 아래 WebSocket 구역에 있다. 여기서 먼저 쓰므로 선언만 미리 둔다. */
+void sendEvent(const char* kind, const char* msg);
+
+enum SoilState : int {
+  SOIL_S_VERY_WET = 0,
+  SOIL_S_WET,
+  SOIL_S_NORMAL,
+  SOIL_S_DRY,
+  SOIL_S_VERY_DRY
+};
+
+/** 경계에서 값이 떨릴 때 상태가 왔다갔다 하는 걸 막는 여유값 */
+constexpr int SOIL_MARGIN = 60;
+
+/** 오름차순 경계. i번째를 넘으면 상태가 i+1이 된다. */
+const int SOIL_EDGES[4] = { SOIL_WET, SOIL_NORMAL, SOIL_DRY, SOIL_VERY_DRY };
+
+const char* SOIL_TEXT[5] = { "VERY WET", "WET", "NORMAL", "DRY", "VERY DRY" };
+
+int   gSoilRaw   = 0;               // 평균 낸 ADC 값
+int   gSoilState = SOIL_S_NORMAL;   // 지금 상태
+
+/** ADC를 여러 번 읽어 평균. 한 번 값은 너무 튄다. */
+int readSoilRaw() {
+  long sum = 0;
+  for (int i = 0; i < 8; i++) {
+    sum += analogRead(PIN_SOIL);
+    delayMicroseconds(300);
+  }
+  return (int)(sum / 8);
+}
+
+/**
+ * 지금 상태(cur)를 알고 있을 때의 새 상태. 히스테리시스가 들어간다.
+ *
+ * 이미 건조한 쪽에 있으면 경계를 낮춰 잡아서 쉽게 안 빠져나오고,
+ * 젖은 쪽에 있으면 경계를 높여 잡아서 쉽게 안 넘어간다.
+ */
+int soilStateOf(int raw, int cur) {
+  int s = 0;
+  for (int i = 0; i < 4; i++) {
+    int edge = SOIL_EDGES[i] + (cur > i ? -SOIL_MARGIN : SOIL_MARGIN);
+    if (raw >= edge) s = i + 1;
+  }
+  return s;
+}
+
+/*
+ * 토양을 읽고, 상태가 바뀐 순간에만 반응한다.
+ *
+ * 바싹 마르면 로봇이 스스로 "물 달라" 표정을 짓는다. 웹에서 표정을 눌러줘야만
+ * 목마른 얼굴이 나오던 걸, 실제 흙 상태가 직접 얼굴을 바꾸게 연결한 것이다.
+ * 이게 이 로봇에서 센서가 행동으로 이어지는 제일 눈에 띄는 고리다.
+ */
+void updateSoil() {
+#if HAS_SOIL
+  gSoilRaw = readSoilRaw();
+
+  int next = soilStateOf(gSoilRaw, gSoilState);
+  if (next == gSoilState) return;
+
+  bool gotDrier = next > gSoilState;
+  gSoilState = next;
+
+  Serial.printf("[토양] %s (raw %d)
+", SOIL_TEXT[next], gSoilRaw);
+  sendEvent(next >= SOIL_S_DRY ? "soil_dry" : "soil_ok", SOIL_TEXT[next]);
+
+  if (next == SOIL_S_VERY_DRY) {
+    requestFace(FACE_THIRSTY);          // 말풍선에 "물"이 뜬다
+  } else if (!gotDrier && next <= SOIL_S_WET) {
+    requestFace(FACE_HAPPY);            // 물을 먹어서 젖었다 → 좋아함
+  }
+#endif
 }
 
 /*
@@ -902,7 +985,11 @@ void sendSensors() {
   doc["type"] = "sensor";
 
 #if HAS_SOIL
-  doc["moisture"] = soilPercent(analogRead(PIN_SOIL));
+  // analogRead를 여기서 또 하지 않는다. updateSoil()이 평균 내둔 값을 쓴다 —
+  // 화면 숫자와 시리얼 로그가 같은 값을 보게 하려는 것이다.
+  doc["moisture"] = soilPercent(gSoilRaw);
+  doc["soilRaw"]  = gSoilRaw;
+  doc["soil"]     = SOIL_TEXT[gSoilState];
 #else
   doc["moisture"] = 50;
 #endif
@@ -1085,6 +1172,7 @@ void netTask(void*) {
     if (now - lastSensorAt >= SENSOR_PERIOD_MS) {
       lastSensorAt = now;
       readLightSensors();
+      updateSoil();          // 상태가 바뀐 순간에만 로그·이벤트·표정이 나간다
       ws.cleanupClients();
       sendSensors();
     }
@@ -1093,9 +1181,9 @@ void netTask(void*) {
     // 배선 확인용. 값이 안 변하거나 이상하면 그 센서만 다시 보면 된다.
     if (now - lastDebugAt >= 2000) {
       lastDebugAt = now;
-      int raw = analogRead(PIN_SOIL);
+      int raw = gSoilRaw;
       Serial.printf("토양 %4d(%-8s) | 조도 L %6.0f  R %6.0f lx | 거리 %5.1f cm | IR %s | 힙 %u\n",
-                    raw, soilLabel(raw), gLuxL, gLuxR, gDistanceCm,
+                    raw, SOIL_TEXT[gSoilState], gLuxL, gLuxR, gDistanceCm,
                     irDetected() ? "감지" : "  - ", ESP.getFreeHeap());
     }
 #endif
@@ -1215,9 +1303,11 @@ void setup() {
 
   // 센서가 살아있는지 부팅 때 한 번 눈으로 확인한다
   readLightSensors();
-  int soilRaw = analogRead(PIN_SOIL);
+  gSoilRaw = readSoilRaw();
+  gSoilState = soilStateOf(gSoilRaw, SOIL_S_NORMAL);
+  int soilRaw = gSoilRaw;
   Serial.printf("[3] 토양 %d (%s) / 조도 L %.0f lx  R %.0f lx / 거리 %.0f cm\n",
-                soilRaw, soilLabel(soilRaw), gLuxL, gLuxR, readDistanceCm());
+                soilRaw, SOIL_TEXT[gSoilState], gLuxL, gLuxR, readDistanceCm());
 
   // --- 와이파이 (AP + STA) ---
   connectWifi();

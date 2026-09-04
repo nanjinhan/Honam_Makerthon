@@ -631,26 +631,49 @@ void renderSipMouth(int dropY, bool openWide) {
 }
 
 void drawHangulMul(GFXcanvas16 &c) {
-  const int x = 61;
-  const int y = 7;
+  /*
+   * "물" — 말풍선 안에 그리는 글자.
+   *
+   * 예전 좌표는 글자가 y 7~55에 걸쳐 있었다. 말풍선 상자 아래끝이 y 44,
+   * 버퍼가 54였으니 받침 ㄹ(y 45~55)은 상자 밖으로 나간 데다 버퍼에서
+   * 잘려나갔다 — 화면에는 "무"로만 보였다. 상자 안(y 3~44)에 들어가도록
+   * 통째로 줄여서 다시 잡았다.
+   *
+   * 가로도 확인했다. 왼쪽의 물방울이 x 39까지 쓰므로 글자는 x 53부터 시작한다.
+   */
   const int T = 3;
 
-  // ㅁ
-  thickLine(c, x,      y,      x + 24, y,      T, C_CYAN);
-  thickLine(c, x,      y,      x,      y + 14, T, C_CYAN);
-  thickLine(c, x + 24, y,      x + 24, y + 14, T, C_CYAN);
-  thickLine(c, x,      y + 14, x + 24, y + 14, T, C_CYAN);
+  const int L = 55;        // 글자 왼쪽
+  const int R = 77;        // 글자 오른쪽
+  const int MID = 66;      // 가운데 (ㅜ 세로획)
 
-  // ㅜ
-  thickLine(c, x - 2,  y + 23, x + 26, y + 23, T, C_CYAN);
-  thickLine(c, x + 12, y + 23, x + 12, y + 31, T, C_CYAN);
+  // ㅁ (초성) — y 6~16
+  thickLine(c, L, 6,  R, 6,  T, C_CYAN);
+  thickLine(c, L, 6,  L, 15, T, C_CYAN);
+  thickLine(c, R, 6,  R, 15, T, C_CYAN);
+  thickLine(c, L, 15, R, 15, T, C_CYAN);
 
-  // ㄹ
-  thickLine(c, x,      y + 38, x + 24, y + 38, T, C_CYAN);
-  thickLine(c, x,      y + 38, x,      y + 43, T, C_CYAN);
-  thickLine(c, x,      y + 43, x + 24, y + 43, T, C_CYAN);
-  thickLine(c, x + 24, y + 43, x + 24, y + 48, T, C_CYAN);
-  thickLine(c, x,      y + 48, x + 24, y + 48, T, C_CYAN);
+  // ㅜ (중성) — 가로획은 글자폭보다 살짝 넓게 빼야 글자꼴이 산다
+  thickLine(c, L - 2, 19,  R + 2, 19, T, C_CYAN);
+  thickLine(c, MID,   19,  MID,   23, T, C_CYAN);
+
+  /*
+   * ㄹ (종성) — 획 순서대로: 위 가로 → 오른쪽 세로 → 가운데 가로 → 왼쪽 세로 → 아래 가로
+   *
+   * 예전 코드는 세로획이 좌우 뒤바뀌어 있었다(위쪽을 왼쪽, 아래쪽을 오른쪽에).
+   * 그러면 ㄹ이 아니라 좌우 대칭된 엉뚱한 모양이 된다.
+   *
+   *   ━━━━━┓
+   *        ┃
+   *   ┏━━━━┛
+   *   ┃
+   *   ┗━━━━━
+   */
+  thickLine(c, L, 27, R, 27, T, C_CYAN);   // 위 가로
+  thickLine(c, R, 27, R, 33, T, C_CYAN);   // 오른쪽 세로
+  thickLine(c, L, 33, R, 33, T, C_CYAN);   // 가운데 가로
+  thickLine(c, L, 33, L, 39, T, C_CYAN);   // 왼쪽 세로
+  thickLine(c, L, 39, R, 39, T, C_CYAN);   // 아래 가로
 }
 
 void renderWaterBubble(bool pulse = false) {
@@ -658,33 +681,39 @@ void renderWaterBubble(bool pulse = false) {
 
   uint16_t border = pulse ? C_CYAN : C_WHITE;
 
+  /*
+   * 상자를 위로 2px 올리고 4px 키웠다. 예전 상자(y 3~44) 안에는 "물"의 받침 ㄹ이
+   * 들어갈 자리가 없어서, ㄹ이 상자 밖 y 45~55에 그려지고 그나마도 버퍼(54)에
+   * 잘려나갔다 — 화면에는 "무"로 보였다.
+   */
   bubbleBuf.drawRoundRect(
-    4, 3,
+    4, 1,
     BUBBLE_BUF_W - 9,
-    BUBBLE_BUF_H - 13,
+    BUBBLE_BUF_H - 9,
     11,
     border
   );
 
   bubbleBuf.drawRoundRect(
-    6, 5,
+    6, 3,
     BUBBLE_BUF_W - 13,
-    BUBBLE_BUF_H - 17,
+    BUBBLE_BUF_H - 13,
     9,
     border
   );
 
+  // 꼬리 — 상자가 내려온 만큼 같이 내린다
   bubbleBuf.fillTriangle(
-    45, 41,
-    57, 41,
-    51, 52,
+    45, 44,
+    57, 44,
+    51, 53,
     border
   );
 
   bubbleBuf.fillTriangle(
-    48, 40,
-    54, 40,
-    51, 47,
+    48, 43,
+    54, 43,
+    51, 50,
     C_BLACK
   );
 

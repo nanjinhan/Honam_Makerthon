@@ -37,7 +37,7 @@ interface SensorMsg {
 }
 interface EventMsg {
   type: 'event'
-  kind: 'docked' | 'watering_done' | 'owner_near' | 'obstacle'
+  kind: 'docked' | 'watering_done' | 'owner_near' | 'obstacle' | 'soil_dry' | 'soil_ok'
   msg?: string
 }
 interface StateMsg {
@@ -101,9 +101,11 @@ function handle(raw: string) {
       watering_done: '실기기 급수 완료',
       owner_near: '실기기 주인 감지',
       obstacle: '장애물 감지 · 우회',
+      soil_dry: '흙이 말랐다',
+      soil_ok: '흙이 촉촉해졌다',
     }
     const line = msg.msg || text[msg.kind]
-    s.pushLog(msg.kind === 'obstacle' ? 'warn' : 'water', line)
+    s.pushLog(msg.kind === 'obstacle' || msg.kind === 'soil_dry' ? 'warn' : 'water', line)
 
     // 앞이 막힌 건 놀랄 일이다 — 이때만 상단 섬을 내린다
     if (msg.kind === 'obstacle') s.raiseAlert('obstacle', line)

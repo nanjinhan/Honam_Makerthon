@@ -108,6 +108,19 @@ function drift() {
   const lux = luxAt(s.pos)
 
   /*
+   * 실기기는 흙의 ADC 원본값(3300 바싹마름 ~ 1800 흠뻑)을 보내고 펌웨어가 5단계로
+   * 판정한다. 목업에는 흙이 없으므로 수분%를 거꾸로 원본값으로 되돌려서 같은
+   * 판정을 흉내낸다. 덕분에 화면 코드는 실기기든 목업이든 한 가지만 보면 된다.
+   */
+  const soilRaw = Math.round(3300 - (sn.moisture / 100) * (3300 - 1800))
+  const soil =
+    soilRaw >= 3300 ? 'VERY DRY'
+    : soilRaw >= 2900 ? 'DRY'
+    : soilRaw >= 2200 ? 'NORMAL'
+    : soilRaw >= 1800 ? 'WET'
+    : 'VERY WET'
+
+  /*
    * 좌우 조도계는 실기기에 두 대가 달려 있다. 목업에서도 두 값을 따로 만들어야
    * 홈 화면의 조도(좌)/조도(우) 게이지가 ESP32 없이도 그럴듯하게 움직인다.
    * 로봇이 향한 방향에 따라 한쪽이 조금 더 밝게 — 그게 광원 탐색의 근거다.
@@ -118,6 +131,8 @@ function drift() {
     moisture: clamp(sn.moisture + (watering ? WATER_RATE : -MOISTURE_DRIFT) * k, 0, 95),
     nutrient: clamp(sn.nutrient - 0.01 * k, 0, 100),
     lux,
+    soilRaw,
+    soil,
     luxL: Math.max(0, Math.round(lux * (1 + tilt) + noise(8))),
     luxR: Math.max(0, Math.round(lux * (1 - tilt) + noise(8))),
     // 목업에는 진짜 장애물이 없다. 실기기가 붙으면 초음파 실측이 덮어쓴다.
