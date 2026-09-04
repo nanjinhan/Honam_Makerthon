@@ -195,7 +195,20 @@ constexpr int PIN_HALL  = 13;   // 도킹 감지 홀센서 (아직 안 꽂음)
  * 지금은 배선이 잡혀서 꺼둔다. 나중에 모터가 또 말을 안 들으면 1로 켜서
  * "배선 문제냐 명령 경로 문제냐"부터 가르면 된다 — 그거 가리는 데 한참 걸렸다.
  */
-#define MOTOR_SELFTEST 0
+#define MOTOR_SELFTEST 1
+
+/*
+ * ── 표정 데모 ────────────────────────────────────────────────────
+ * 1로 두면 **네트워크와 무관하게** 표정을 계속 랜덤으로 바꿔 재생한다.
+ *
+ * "표정이 안 바뀐다"의 원인이 TFT/애니메이션 쪽인지, 아니면 명령이 안 오는
+ * 쪽인지를 가르는 용도다. 이걸 켰는데도 얼굴이 그대로면 TFT 문제고,
+ * 잘 바뀌면 화면은 멀쩡하고 Supabase에서 표정이 안 오는 것이다.
+ *
+ * 웹에서 온 표정 요청은 여전히 우선한다 — 눌러본 게 반영되는지도 같이 보인다.
+ * 확인이 끝나면 0으로 꺼라. 안 끄면 표정이 계속 제멋대로 바뀐다.
+ */
+#define FACE_DEMO 1
 
 /*
  * 0보다 크면 이 간격(ms)마다 자가진단을 **계속 반복**한다.
@@ -206,7 +219,7 @@ constexpr int PIN_HALL  = 13;   // 도킹 감지 홀센서 (아직 안 꽂음)
  *
  * 배선이 잡히면 0으로 꺼라. 안 끄면 8초마다 로봇이 혼자 움직인다.
  */
-#define MOTOR_SELFTEST_REPEAT_MS 8000
+#define MOTOR_SELFTEST_REPEAT_MS 15000
 
 // ============================================================
 // 1. 두 코어가 주고받는 값 — 이게 전부다
@@ -231,6 +244,21 @@ enum FaceId : int {
 };
 
 volatile int gFaceReq = FACE_NONE;
+
+/** 시리얼 로그용 이름. 화면에 나온 얼굴과 로그를 대조할 수 있어야 디버깅이 된다. */
+const char* faceName(int id) {
+  switch (id) {
+    case FACE_NEUTRAL:  return "neutral";
+    case FACE_HAPPY:    return "happy";
+    case FACE_THIRSTY:  return "thirsty";
+    case FACE_SLEEPY:   return "sleepy";
+    case FACE_LOVE:     return "love";
+    case FACE_EXCITED:  return "excited";
+    case FACE_DRINKING: return "drinking";
+    case FACE_DIZZY:    return "dizzy";
+    default:            return "none";
+  }
+}
 
 /** SPEC §9-2의 face 문자열 → 얼굴 애니메이션 번호 */
 int parseFace(const char* v) {
@@ -637,8 +665,7 @@ void updateSoil() {
   bool gotDrier = next > gSoilState;
   gSoilState = next;
 
-  Serial.printf("[토양] %s (raw %d)
-", SOIL_TEXT[next], gSoilRaw);
+  Serial.printf("[토양] %s (raw %d)\n", SOIL_TEXT[next], gSoilRaw);
   sendEvent(next >= SOIL_S_DRY ? "soil_dry" : "soil_ok", SOIL_TEXT[next]);
 
   if (next == SOIL_S_VERY_DRY) {
@@ -1346,9 +1373,26 @@ void loop() {
 
   if (req != FACE_NONE) {
     gFaceReq = FACE_NONE;   // 먼저 지운다 — 재생하는 동안 들어온 새 요청을 안 잃는다
+    Serial.printf("[표정] %s\n", faceName(req));
     playFace(req);
     return;
   }
+
+#if FACE_DEMO
+  /*
+   * 요청이 없을 때 가만히 있지 않고 아무 표정이나 하나 골라 재생한다.
+   * 와이파이가 끊겨 있어도 얼굴은 계속 움직이므로, 화면이 살아있는지
+   * 이것만 보면 안다.
+   */
+  static const int DEMO_FACES[] = {
+    FACE_HAPPY, FACE_THIRSTY, FACE_SLEEPY, FACE_LOVE,
+    FACE_EXCITED, FACE_DRINKING, FACE_DIZZY, FACE_NEUTRAL,
+  };
+  int pick = DEMO_FACES[random(sizeof(DEMO_FACES) / sizeof(DEMO_FACES[0]))];
+  Serial.printf("[표정데모] %s\n", faceName(pick));
+  playFace(pick);
+  return;
+#endif
 
   idleWithBlink(2500);
 
