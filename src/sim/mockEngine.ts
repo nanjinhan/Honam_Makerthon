@@ -42,6 +42,9 @@ const IDLE_DWELL_TICKS = Math.round(8000 / TICK_MS) // 이만큼 가만히 있�
 const SUN_LUX = 600 // 이 위로는 일조 시간으로 친다
 const BATTERY_OK = 25
 
+/** 실측이 이 시간 넘게 안 들어오면 목업 드리프트를 다시 굴린다 */
+const REAL_SENSOR_STALE_MS = 10_000
+
 /**
  * 사이클 속도 — SPEC §8-1/§8-5는 "한 사이클 약 90초"를 잡았지만, 실제 시연 공간이
  * 1m 남짓이라 화면에서 90초짜리 여정을 보여주면 실물과 호흡이 완전히 어긋난다.
@@ -385,8 +388,15 @@ export function tick() {
     s.pushLog('system', '10초 무입력 → 자율 모드 복귀')
   }
 
-  // 실측이 들어오는 동안에는 드리프트를 멈춘다 (SPEC §9-3)
-  if (s.conn !== 'live') drift()
+  /*
+   * 실측이 들어오는 동안에는 드리프트를 멈춘다 (SPEC §9-3).
+   *
+   * 예전엔 WebSocket 연결(conn === 'live')만 봤다. 이제 Supabase를 거쳐서도
+   * 실측이 들어오는데 그때는 conn이 'mock'이라, 시뮬레이션이 진짜 값을
+   * 200ms마다 덮어써 버렸다. "센서를 연동했는데 화면은 목업"의 원인이다.
+   * 경로를 가리지 말고 **최근에 실측이 왔는가**로 판단한다.
+   */
+  if (Date.now() - s.sensorAt > REAL_SENSOR_STALE_MS) drift()
 
   const arrived = advance()
 

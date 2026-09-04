@@ -91,6 +91,13 @@ export function HomeScreen({
   const roomTime = useRobotStore((s) => s.roomTime)
   const behavior = useRobotStore((s) => s.behavior)
   const conn = useRobotStore((s) => s.conn)
+  /*
+   * "실기기"인지의 판단은 WebSocket 연결 여부가 아니라 **실측이 들어오고 있는가**다.
+   * Supabase를 거쳐 오는 경우 conn은 계속 'mock'이라, 진짜 센서값을 보고 있으면서도
+   * 화면에는 "목업"이라고 떠 있었다.
+   */
+  const sensorAt = useRobotStore((s) => s.sensorAt)
+  const live = conn === 'live' || Date.now() - sensorAt < 10_000
 
   const label = useRobotStore(statusLabel)
   const reason = useRobotStore((s) => reasonOf(s))
@@ -129,10 +136,10 @@ export function HomeScreen({
             <span
               className={cn(
                 'h-1.5 w-1.5 rounded-full',
-                conn === 'live' ? 'bg-primary' : 'bg-muted-foreground/40',
+                live ? 'bg-primary' : 'bg-muted-foreground/40',
               )}
             />
-            {conn === 'live' ? '실기기' : '목업'}
+            {live ? '실기기' : '목업'}
           </span>
         </div>
 

@@ -102,6 +102,45 @@ export type Database = {
         }
         Relationships: []
       }
+      robot_sensors: {
+        Row: {
+          distance: number
+          id: number
+          ir: boolean
+          lux: number
+          lux_l: number
+          lux_r: number
+          moisture: number
+          soil: string
+          soil_raw: number
+          updated_at: string
+        }
+        Insert: {
+          distance?: number
+          id?: number
+          ir?: boolean
+          lux?: number
+          lux_l?: number
+          lux_r?: number
+          moisture?: number
+          soil?: string
+          soil_raw?: number
+          updated_at?: string
+        }
+        Update: {
+          distance?: number
+          id?: number
+          ir?: boolean
+          lux?: number
+          lux_l?: number
+          lux_r?: number
+          moisture?: number
+          soil?: string
+          soil_raw?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       robot_state: {
         Row: {
           behavior: string

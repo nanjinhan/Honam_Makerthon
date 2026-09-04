@@ -95,6 +95,13 @@ export interface RobotState {
   ownerNear: boolean
   /** SPEC §8-4의 3초 유지를 setTimeout 없이 처리하기 위한 만료 시각 */
   ownerNearUntil: number
+  /**
+   * 실측 센서값이 마지막으로 들어온 시각. 0이면 아직 한 번도 없다.
+   *
+   * 목업 엔진은 이 값이 최근이면 드리프트를 멈춘다. 안 그러면 시뮬레이션이
+   * 실측을 200ms마다 덮어써서 진짜 숫자가 화면에 남지 못한다.
+   */
+  sensorAt: number
   logs: LogEntry[]
   /** 지금 섬을 내려야 할 긴급 상황. 없으면 섬 자체가 화면에서 사라진다. */
   alert: UrgentAlert | null
@@ -113,6 +120,8 @@ export interface RobotActions {
   setTarget: (target: Point | null) => void
   setPath: (path: Point[]) => void
   applySensor: (patch: Partial<Sensors>) => void
+  /** 실기기에서 온 값. applySensor와 같지만 "실측이 살아있다"를 같이 표시한다. */
+  applyRealSensor: (patch: Partial<Sensors>) => void
   setConn: (conn: Conn) => void
   setOwnerNear: (near: boolean) => void
   /** 헤더 프로필 아이콘 탭 = 주인이 귀가한 척. 실기기에서는 BLE RSSI가 대신한다. */
@@ -167,6 +176,7 @@ function initialState(): RobotState {
     conn: 'mock',
     ownerNear: false,
     ownerNearUntil: 0,
+    sensorAt: 0,
     logs: [],
     alert: null,
     stats: { waterCount: 0, distance: 0, sunMinutes: 0, greetCount: 0 },
@@ -187,6 +197,9 @@ export const robotStore = createStore<RobotStore>()((set) => ({
   setPath: (path) => set({ path }),
 
   applySensor: (patch) => set((s) => ({ sensors: { ...s.sensors, ...patch } })),
+
+  applyRealSensor: (patch) =>
+    set((s) => ({ sensors: { ...s.sensors, ...patch }, sensorAt: Date.now() })),
   setConn: (conn) => set({ conn }),
 
   setOwnerNear: (near) =>

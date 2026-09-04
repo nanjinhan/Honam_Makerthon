@@ -86,7 +86,7 @@ function handle(raw: string) {
     // 필드를 하나씩 옮겨 담는다. 예전엔 통째로 스프레드했는데, 그러면 펌웨어가
     // 새 필드(ir 등)를 하나 추가할 때마다 스토어에 정체불명 키가 섞여 들어간다.
     const { type: _t, ir, ...rest } = msg
-    s.applySensor(ir === undefined ? rest : { ...rest, irNear: ir })
+    s.applyRealSensor(ir === undefined ? rest : { ...rest, irNear: ir })
     return
   }
   if (msg.type === 'state') {

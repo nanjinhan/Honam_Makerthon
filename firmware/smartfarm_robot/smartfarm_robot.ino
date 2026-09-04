@@ -195,7 +195,7 @@ constexpr int PIN_HALL  = 13;   // 도킹 감지 홀센서 (아직 안 꽂음)
  * 지금은 배선이 잡혀서 꺼둔다. 나중에 모터가 또 말을 안 들으면 1로 켜서
  * "배선 문제냐 명령 경로 문제냐"부터 가르면 된다 — 그거 가리는 데 한참 걸렸다.
  */
-#define MOTOR_SELFTEST 1
+#define MOTOR_SELFTEST 0
 
 /*
  * ── 표정 데모 ────────────────────────────────────────────────────
@@ -208,7 +208,7 @@ constexpr int PIN_HALL  = 13;   // 도킹 감지 홀센서 (아직 안 꽂음)
  * 웹에서 온 표정 요청은 여전히 우선한다 — 눌러본 게 반영되는지도 같이 보인다.
  * 확인이 끝나면 0으로 꺼라. 안 끄면 표정이 계속 제멋대로 바뀐다.
  */
-#define FACE_DEMO 1
+#define FACE_DEMO 0
 
 /*
  * 0보다 크면 이 간격(ms)마다 자가진단을 **계속 반복**한다.
@@ -814,6 +814,13 @@ void connectWifi() {
  */
 const unsigned long POLL_MS = 3000;
 
+/*
+ * 센서 실측을 클라우드로 올리는 주기. 조종 명령(0.3초)만큼 급하지 않고,
+ * 게이지 숫자가 3초 늦게 갱신되는 건 눈에 안 띈다. 너무 자주 쓰면 Supabase
+ * 쓰기만 늘어난다.
+ */
+const unsigned long SENSOR_PUSH_MS = 3000;
+
 String lastLcdUpdatedAt = "";
 String lastDbFace = "";
 
@@ -835,6 +842,41 @@ HTTPClient gHttp;
 bool gTlsReady = false;
 
 /** Supabase REST GET 한 번. 성공하면 body를 채우고 true. */
+/**
+ * Supabase REST POST(upsert). 같은 TLS 연결을 GET과 나눠 쓴다.
+ *
+ * Prefer: resolution=merge-duplicates 가 upsert를 만든다 — id=1 행이 이미 있으면
+ * 새로 만들지 않고 덮어쓴다. 이력이 아니라 "지금 값" 한 줄만 필요하기 때문이다.
+ */
+bool supabasePost(const String& table, const String& json) {
+  if (WiFi.status() != WL_CONNECTED) return false;
+
+  if (!gTlsReady) {
+    gTls.setInsecure();
+    gHttp.setReuse(true);
+    gTlsReady = true;
+  }
+
+  gHttp.setTimeout(4000);
+  if (!gHttp.begin(gTls, String(SUPABASE_URL) + "/rest/v1/" + table)) return false;
+  gHttp.addHeader("apikey", SUPABASE_ANON_KEY);
+  gHttp.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
+  gHttp.addHeader("Content-Type", "application/json");
+  gHttp.addHeader("Prefer", "resolution=merge-duplicates");
+
+  int code = gHttp.POST(json);
+  bool ok = (code >= 200 && code < 300);
+  if (!ok) {
+    Serial.printf("[supabase] POST %s 실패 HTTP %d\n", table.c_str(), code);
+    gHttp.end();
+    gTls.stop();   // 상한 연결일 수 있다. 끊어서 다음에 새로 붙게 한다.
+    return false;
+  }
+
+  gHttp.end();
+  return true;
+}
+
 bool supabaseGet(const String& query, String& body) {
   if (WiFi.status() != WL_CONNECTED) return false;
 
@@ -1060,6 +1102,35 @@ void sendSensors() {
   ws.textAll(out);
 }
 
+/*
+ * 센서 실측을 Supabase에 올린다.
+ *
+ * sendSensors()는 WebSocket으로만 쏜다 — 폰이 같은 와이파이에 있어야 하고,
+ * 배포된 https 사이트에서는 브라우저가 ws:// 를 막아서 아예 못 받는다.
+ * 그래서 웹의 게이지가 전부 목업 숫자를 띄우고 있었다.
+ *
+ * 이 경로는 ESP32가 밖으로 나가서 쓰기만 하므로 어디서 열어도 실측이 보인다.
+ * robot_command(웹 -> 로봇)의 정반대 방향이다.
+ */
+void pushSensorsToCloud() {
+  JsonDocument doc;
+  doc["id"]       = 1;
+  doc["moisture"] = soilPercent(gSoilRaw);
+  doc["soil"]     = SOIL_TEXT[gSoilState];
+  doc["soil_raw"] = gSoilRaw;
+  doc["lux"]      = (gLuxL + gLuxR) / 2.0f;
+  doc["lux_l"]    = gLuxL;
+  doc["lux_r"]    = gLuxR;
+  doc["distance"] = gDistanceCm;
+  doc["ir"]       = irDetected();
+
+  // updated_at은 안 보낸다. ESP32에 시계가 없어서 못 채운다 — DB 트리거가 찍는다.
+
+  String out;
+  serializeJson(doc, out);
+  supabasePost("robot_sensors", out);
+}
+
 void sendEvent(const char* kind, const char* msg) {
   JsonDocument doc;
   doc["type"] = "event";
@@ -1122,6 +1193,7 @@ constexpr unsigned long RANGE_PERIOD_MS  = 200;   // 초음파는 한 번에 최
 void netTask(void*) {
   unsigned long lastPoll = 0;
   unsigned long lastCmdPoll = 0;
+  unsigned long lastSensorPush = 0;
   unsigned long lastSensorAt = 0;
   unsigned long lastRangeAt = 0;
   unsigned long lastWifiTry = 0;
@@ -1220,6 +1292,12 @@ void netTask(void*) {
     if (now - lastCmdPoll >= CMD_POLL_MS) {
       lastCmdPoll = now;
       pollCommand();
+    }
+
+    // 실측을 클라우드로. 이게 있어야 배포된 웹에서도 진짜 숫자가 보인다.
+    if (now - lastSensorPush >= SENSOR_PUSH_MS) {
+      lastSensorPush = now;
+      pushSensorsToCloud();
     }
 
     if (now - lastPoll >= POLL_MS) {

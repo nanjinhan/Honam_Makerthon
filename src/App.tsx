@@ -7,6 +7,7 @@ import { ControlScreen } from '@/screens/ControlScreen'
 import { HomeScreen } from '@/screens/HomeScreen'
 import { LogScreen } from '@/screens/LogScreen'
 import { MapScreen } from '@/screens/MapScreen'
+import { startCloudSensors } from '@/net/cloudSensors'
 import { startCloudSync } from '@/net/cloudSync'
 import { startEngine } from '@/sim/mockEngine'
 
@@ -17,6 +18,8 @@ export default function App() {
   useEffect(() => startEngine(), [])
   // Supabase가 연결 안 돼 있으면 아무것도 안 하고 조용히 빠진다.
   useEffect(() => startCloudSync(), [])
+  // ESP32가 Supabase에 올린 실측을 가져온다. 같은 와이파이가 아니어도 진짜 값이 보인다.
+  useEffect(() => startCloudSensors(), [])
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col bg-background text-foreground">
